@@ -82,7 +82,7 @@ static std::string mapScopes[mappingLayers::NUM_MAPS];
 // Program options
   // Properties of a single occupancy grid map
   static std::string currentTileTfName(""), lastTileTfName("");
-  static std::string topicMap, topicLaser, tileOriginTfPrefix, tileOriginTfSufixForRoiOrigin, currentTfNameTopic, worldLink, storeMapsTopic;
+  static std::string topicMap, topicLaser, tileOriginTfPrefix, tileOriginTfSufixForRoiOrigin, currentTfNameTopic, worldLink, storeMapsTopic, reqTopicMapStack;
   static double idleStartupTime_s;
   static double resolution = mapping::discreteResolution;
   static float maxOccupancyUpdateCertainty = mapping::ogm::maxOccupancyUpdateCertainty;
@@ -1543,11 +1543,11 @@ void addMapToResponse(std::string name, mrpt::maps::COccupancyGridMap2D* map, ma
   const std::size_t numCells = map->getSizeX() * map->getSizeY();
   // Copy the cells
   auto mapRes = (response.response.mapStack.end()-1);
-  mapRes->mapFloat.resize(numCells);
+  mapRes->map.resize(numCells);
   for (int idx = 0; idx < numCells; ++idx) {
       int xIdx = idx % map->getSizeX();
       int yIdx = idx / map->getSizeX();
-      mapRes->mapFloat.at(map->getCell(xIdx, yIdx));
+      mapRes->map.at(map->getCell(xIdx, yIdx));
   }
 
   mapRes->header.stamp = ros::Time::now();
@@ -1601,6 +1601,7 @@ int main(int argc, char **argv){
   n.param<std::string>("current_tf_name_topic", currentTfNameTopic, "/currentTfTile");
   n.param<std::string>("world_link", worldLink, "odom");
   n.param<std::string>("store_maps_topic", storeMapsTopic, "/storemaps");
+  n.param<std::string>("req_topic_map_stack", reqTopicMapStack, "/reqMapStack");
   n.param<double>("idle_startup_time", idleStartupTime_s, -1.0); // Wait before mapping (< 0 to disable)
 
   n.param<int>("debug", debug, 0); // Enable debug outputs
@@ -1696,7 +1697,7 @@ int main(int argc, char **argv){
   // Prepare ROS service
   // TODO: Do this on demand for given subscribed topics
   const std::string s("/");
-  ros::ServiceServer service_mapStack     = n.advertiseService("/reqMapStack"/*scopes::map::statServer::parent + s + scopes::map::statServer::requests::mapStack*/, mapStatServerMapStack);
+  ros::ServiceServer service_mapStack     = n.advertiseService(reqTopicMapStack/*scopes::map::statServer::parent + s + scopes::map::statServer::requests::mapStack*/, mapStatServerMapStack);
 
 //  ros::ServiceServer service_singleLayerOgm = n.advertiseService(scopes::map::ogmServer::parent + s + scopes::map::ogmServer::requests::compressedMapImage , mapServerCompressedMap);
 //  ros::ServiceServer service_singleLayerOgm = n.advertiseService(scopes::map::ogmServer::parent + s + scopes::map::ogmServer::requests::stockEdge , mapServerStockEdge);

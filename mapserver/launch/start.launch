@@ -56,6 +56,7 @@
     <param name="tile_origin_tf_sufix_for_roi_origin" type="string" value="_ROI_ORIGIN" />
     <param name="current_tf_name_topic" type="string" value="/currentTfTile" />
     <param name="world_link" type="string" value="world" />
+    <param name="req_topic_map_stack" type="string" value="/reqMapStack" />
     <param name="resolution" value="0.02" />
     <param name="store_maps_topic" value="/store_maps" /> <!--Trigger this scope to store the current map-->
     <param name="max_occupancy_update_certainty" value="0.8" />
