@@ -44,7 +44,7 @@ std::mutex mtxSwap, mtxShowRpc, mtxShowIsm;
 #include <ros/duration.h>
 
 ros::Publisher publisherMap, publisherIsmAsPointCloud, publisherIsmAsOgm;
-ros::Subscriber subscriberIsm, subscriberTfTileName;
+ros::Subscriber subscriberIsm, subscriberTfTileName, subscriberStoreMaps;
 tf::TransformListener *listenerTf;
 
 // OpenCV
@@ -81,7 +81,7 @@ static std::string mapScopes[mappingLayers::NUM_MAPS];
 // Program options
   // Properties of a single occupancy grid map
   static std::string currentTileTfName(""), lastTileTfName("");
-  static std::string topicMap, topicLaser, tileOriginTfPrefix, tileOriginTfSufixForRoiOrigin, currentTfNameTopic, worldLink;
+  static std::string topicMap, topicLaser, tileOriginTfPrefix, tileOriginTfSufixForRoiOrigin, currentTfNameTopic, worldLink, storeMapsTopic;
   static double idleStartupTime_s;
   static double resolution = mapping::discreteResolution;
   static float maxOccupancyUpdateCertainty = mapping::ogm::maxOccupancyUpdateCertainty;
@@ -247,6 +247,8 @@ void translateMap(cv::Mat &src, cv::Mat &dst, double offsetx = 0, double offsety
 
 }
 
+
+
 template <typename T>
 void mapRefreshAndStorage(const std::shared_ptr<std::map<std::string, mrpt::maps::COccupancyGridMap2D*>> &mapStack,
                           const std::shared_ptr<std::map<std::string, mrpt::maps::COccupancyGridMap2D*>> &mapStackShiftedResult,
@@ -258,16 +260,25 @@ void mapRefreshAndStorage(const std::shared_ptr<std::map<std::string, mrpt::maps
                           const bool storeMapStack,
                           const bool shiftMapStack,
                           const bool clearMapStack,
-                          T fillValue = 0.5f) {
+                          T fillValue = 0.5f,
+                          bool storeCurrentPosition = true) {
 
   // The message from the last time the function was called (So it is the location of the center)
   static tf::StampedTransform transformRoiInWorldLast;
+
+//  static bool runOnce = true;
+//  if (runOnce) {
+//      ROS_WARN("First run, map storage coordniates might be corrupted");
+//      transformRoiInWorldLast = transformRoiInWorld;
+//      runOnce = false;
+//  }
 
   ROS_ERROR("storeMapStack: %d", storeMapStack);
   ROS_ERROR("mapStack->size(): %d", mapStack->size());
   if (storeMapStack) {
     // Get the timestamp in microseconds
-    uint64_t timestamp = uint64_t(transformRoiInWorld.stamp_.sec) * uint64_t(1e6) + uint64_t(transformRoiInWorld.stamp_.nsec / 1e6);
+//    ros::Time stamp = ros::Time::now();
+//    uint64_t timestamp = uint64_t(stamp.sec) * uint64_t(1e6) + uint64_t(stamp.nsec / 1e6);
     // Store each layer in the map
     for (auto it=mapStack->begin(); it!=mapStack->end(); ++it) {
       std::cout << it->first << " => " << it->second << '\n';
@@ -282,14 +293,14 @@ void mapRefreshAndStorage(const std::shared_ptr<std::map<std::string, mrpt::maps
       std::ostringstream oss;
       oss << mapStorageLocation
           << "What_" << prefixString << "_"
-          << "Timestamp_" << timestamp << "us_"
+          << "Timestamp_" << ros::Time::now() << "s.ns_"
           << "Format_" << format << "_"
           << "Unit_" << formatUnitString << "_"
           << "LayerIdx_" << mapIdx << "_"
           << "GridRes_" << int(round(resolution_meterPerTile * double(geometry::millimeterPerMeter))) <<  "mm_"
-          << "X_" << transformRoiInWorld.getOrigin().x() << "m_"
-          << "Y_" << transformRoiInWorld.getOrigin().y() << "m_"
-          << "Z_" << transformRoiInWorld.getOrigin().z() << "m_"
+          << "X_" << transformRoiInWorldLast.getOrigin().x() << "m_"
+          << "Y_" << transformRoiInWorldLast.getOrigin().y() << "m_"
+          << "Z_" << transformRoiInWorldLast.getOrigin().z() << "m_"
           << "rows_" << it->second->getSizeY() << "_"
           << "cols_" << it->second->getSizeX() << "_"
           << ".bin";
@@ -343,7 +354,35 @@ void mapRefreshAndStorage(const std::shared_ptr<std::map<std::string, mrpt::maps
     }
   }
 
-  transformRoiInWorldLast = transformRoiInWorld; // Store the new location for the next time
+  if (storeCurrentPosition) {
+      transformRoiInWorldLast = transformRoiInWorld; // Store the new location for the next time
+  }
+
+}
+
+
+void mapStorage(const std::shared_ptr<std::map<std::string, mrpt::maps::COccupancyGridMap2D*>> &mapStack,
+                          const std::string prefixString,
+                          const std::string formatString,
+                          const std::string formatUnitString,
+                          const double resolution_meterPerTile) {
+
+  const std::shared_ptr<std::map<std::string, mrpt::maps::COccupancyGridMap2D*>> dummyMap;
+  const tf::StampedTransform dummyTf;
+  const float dummyFloat = 0.0f;
+
+  mapRefreshAndStorage( mapStack,                                 // Map to shift/store/reset
+                        dummyMap,                                 // Nothing at all
+                        dummyTf,                                  // Transform
+                        std::string("OGM"),                       // Kind of map
+                        std::string(""),                          // Format (empty: Take from type specifier)
+                        std::string("logodds"),                   // Unit
+                        def.resolution,                           // Resolution per tile
+                        true,                                     // Maps should be stored
+                        false,                                    // Maps should be shifted
+                        false,                                    // Map should be reseted reset
+                        dummyFloat,                               // Some float value
+                        false);                                   // Don't store the current position
 
 }
 
@@ -1239,6 +1278,32 @@ void advertiseSubscribers(
   }
 }
 
+void storeMaps (const std_msgs::String nameMsg) {
+
+  if (nameMsg.data.empty()) {
+      ROS_INFO("storeMaps: Store all maps");
+  } else {
+      // TODO Store maps defined in nameMsg
+  }
+
+  mapRefresh.lock();
+  std::string tileTfName = currentTileTfName;
+  auto mapStack = currentMapStack;
+  mapRefresh.unlock();
+
+  if (currentTileTfName.empty()) {
+      ROS_WARN("storeMaps: No current frame name available. Skipping storage");
+      return;
+  }
+
+  mapStorage( currentMapStack,
+              std::string("OGM"),
+              std::string(""),
+              std::string("logodds"),
+              def.resolution);
+}
+
+
 ///
 /// \brief Store the current tf tile name and swap the storage
 /// \param nameMsg Name of the current tile tf
@@ -1420,6 +1485,50 @@ void formatAndSendGrid(std::vector<std::string> &list,
 
 }
 
+///
+/// \brief Shows the current RPC if debug is on
+///
+//void showRpc() {
+//    if (debug) {
+//        ROS_INFO("DEBUG: Show the requests");
+//        if(mapStackStatisticDebug.empty() || mapStackStatisticDebug.empty()) {
+//            ROS_ERROR("mapStackStatistic is empty");
+//            return;
+//        }
+//        cv::Mat mapStackStatisticRequestDebugTmp, mapStackStatisticDebugTmp;
+//        mtxShowRpc.lock();
+//            mapStackStatisticRequestDebug.copyTo(mapStackStatisticRequestDebugTmp);
+//            mapStackStatisticDebug.copyTo(mapStackStatisticDebugTmp);
+//            mapStackStatisticDebugTmp.release();
+//            mapStackStatisticRequestDebugTmp.release();
+//            cv::RotatedRect rectTmp = rect;
+//        mtxShowRpc.unlock();
+//
+//        std::stringstream os;
+//        os << ros::Time::now();
+//        {
+//            cv::imshow(std::string("mapStackStatisticRequest"), mapStackStatisticRequestDebugTmp);
+//            cv::setWindowTitle(std::string("mapStackStatisticRequest"),
+//                               std::string("mapStackStatisticRequest at ") + os.str());
+//        }
+//        {
+//            // Draw the request in pseudo-colors
+//            if (debugDrawRpc) {
+//                // TODO Make a cast which is possible to handle all data types
+//                utils::castCopyImage(mapStackStatisticDebugTmp, mapStackStatisticDebugTmp, CV_16UC1);
+//                mapStackStatisticDebugTmp.convertTo(mapStackStatisticDebugTmp, CV_8UC3);
+//                cv::cvtColor( mapStackStatisticDebugTmp, mapStackStatisticDebugTmp, CV_GRAY2BGR );
+//                utils::drawRotatedRectInImage(mapStackStatisticDebugTmp, rect, cv::Scalar(0,0,255));
+//            }
+//
+//            cv::imshow(std::string("mapStackStatistic"), mapStackStatisticDebugTmp);
+//            cv::setWindowTitle(std::string("mapStackStatistic"),
+//                               std::string("mapStackStatistic at ") + os.str());
+//        }
+//        cv::waitKey(1);
+//    }
+//}
+
 
 int main(int argc, char **argv){
 
@@ -1431,6 +1540,7 @@ int main(int argc, char **argv){
   n.param<std::string>("tile_origin_tf_sufix_for_roi_origin", tileOriginTfSufixForRoiOrigin, machine::frames::names::ROI_ORIGIN);
   n.param<std::string>("current_tf_name_topic", currentTfNameTopic, "/currentTfTile");
   n.param<std::string>("world_link", worldLink, "odom");
+  n.param<std::string>("store_maps_topic", storeMapsTopic, "/storemaps");
   n.param<double>("idle_startup_time", idleStartupTime_s, -1.0); // Wait before mapping (< 0 to disable)
 
   n.param<int>("debug", debug, 0); // Enable debug outputs
@@ -1516,6 +1626,9 @@ int main(int argc, char **argv){
   listenerTf = new tf::TransformListener;
   std::vector<ros::Subscriber> subIsmList; // List of subscribers TODO Replace by std::map?
   subscriberTfTileName = n.subscribe<std_msgs::String>(currentTfNameTopic, 2, tfTileNameHandler);
+  subscriberStoreMaps = n.subscribe<std_msgs::String>(storeMapsTopic, 1, storeMaps);
+
+
 
   publisherIsmAsPointCloud = n.advertise<sensor_msgs::PointCloud>("foo",1);
   publisherIsmAsOgm = n.advertise<nav_msgs::OccupancyGrid>("bar",1);
@@ -1556,6 +1669,8 @@ int main(int argc, char **argv){
         std::string reference = currentTileTfName + tileOriginTfSufixForRoiOrigin;
         formatAndSendGrid(foo, reference, currentMapStack, n, topicDebugGridPrefix);
       }
+
+//      showRpc();
 
       // Add new subscribers
       advertiseSubscribers<nav_msgs::OccupancyGrid>(subIsmList, doIsmFusion, ismScopePrefix, debug, n);
