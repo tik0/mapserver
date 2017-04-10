@@ -271,3 +271,46 @@ add_dependencies(mapserver_raw_rpc_test mapserver_msgs_gencpp mapserver_gencpp)
 add_dependencies(mapserver_stat mapserver_gencpp)
 
 add_definitions("-std=c++11")
+
+
+
+catkin_package(
+  INCLUDE_DIRS
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+#   LIBRARIES
+  CATKIN_DEPENDS
+    nav_msgs
+    rosapi
+    roscpp
+    rospy
+    nav_msgs
+    sensor_msgs
+    mapserver_msgs
+    std_msgs
+    geometry_msgs
+    rosconsole
+    rosgraph_msgs
+    roslang
+    rostime
+    tf
+    tf_conversions
+    genmsg
+    laser_geometry
+    message_generation
+    mrpt_rawlog
+    mrpt_map
+    mrpt_icp_slam_2d
+    mrpt_rbpf_slam
+    mrpt_msgs
+    mrpt_bridge
+    mrpt_reactivenav2d
+    mrpt_graphslam_2d
+    mrpt_ekf_slam_2d
+    mrpt_localization
+    mrpt_tutorials
+    mrpt_ekf_slam_3d
+  DEPENDS
+    ${EIGEN_PACKAGE}
+    ${OpenCV_PACKAGE}
+    ${Boost_PACKAGE}
+)
