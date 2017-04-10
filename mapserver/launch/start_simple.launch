@@ -1,0 +1,65 @@
+<launch>
+
+  <!-- These are the arguments you can pass this launch file, for example paused:=true -->
+  <arg name="paused" default="false"/>
+  <arg name="use_sim_time" default="true"/>
+  <arg name="gui" default="true"/>
+  <arg name="headless" default="false"/>
+  <arg name="debug" default="false"/>
+  <arg name="update_rate" default="50.0"/> <!--Update rate for tfs and gazebo plugins-->
+
+  <!-- The robots -->
+  <!-- We resume the logic in empty_world.launch, changing only the name of the world to be launched -->
+  <include file="$(find amiro_gazebo)/launch/gazebo.launch">
+    <arg name="world_name" value="$(find amiro_gazebo)/worlds/empty_slow.world"/>
+    <arg name="debug" value="$(arg debug)" />
+    <arg name="gui" value="$(arg gui)" />
+    <arg name="paused" value="$(arg paused)"/>
+    <arg name="use_sim_time" value="$(arg use_sim_time)"/>
+    <arg name="headless" value="$(arg headless)"/>
+  </include>
+
+  <!-- Load the AMiRo with namespace amiro1 -->
+  <include file="$(find amiro_description)/launch/amiro.launch" clear_params="true" ns="amiro1">
+    <arg name="robot_name" value="amiro1" />
+    <arg name="robot_position" value="-x 0.0 -y 0.0 -z 0.01" />
+    <arg name="update_rate" value="$(arg update_rate)" />
+  </include>
+  
+  <!-- Load the AMiRo+camera with namespace amiro2 -->
+  <include file="$(find amiro_description)/launch/amiro.launch" clear_params="true" ns="amiro2">
+    <arg name="robot_name" value="amiro2" />
+    <arg name="robot_position" value="-x 1.0 -y 1.0 -z 0.01 -R 0 -P 0 -Y -2.535" />
+    <arg name="update_rate" value="$(arg update_rate)" />
+    <arg name="robot_model" value="amiro_camera.xacro" />
+  </include>
+  
+  <!-- Load the AMiRo+Laser with namespace amiro3 -->
+  <include file="$(find amiro_description)/launch/amiro.launch" clear_params="true" ns="amiro3">
+    <arg name="robot_name" value="amiro3" />
+    <arg name="robot_position" value="-x -1.0 -y 1.0 -z 0.01" />
+    <arg name="update_rate" value="$(arg update_rate)" />
+    <arg name="robot_model" value="amiro_hokuyo.xacro" />
+  </include>
+  
+  <!-- Load the AMiRo+Astra with namespace amiro4 -->
+  <include file="$(find amiro_description)/launch/amiro.launch" clear_params="true" ns="amiro4">
+    <arg name="robot_name" value="amiro4" />
+    <arg name="robot_position" value="-x 1.0 -y -1.0 -z 0.01" />
+    <arg name="update_rate" value="$(arg update_rate)" />
+    <arg name="robot_model" value="amiro_astra.xacro" />
+  </include>
+
+  <!-- Load the AMiRo+tilted Laser with namespace amiro5 -->
+  <include file="$(find amiro_description)/launch/amiro.launch" clear_params="true" ns="amiro5">
+    <arg name="robot_name" value="amiro5" />
+    <arg name="robot_position" value="-x -1.0 -y -1.0 -z 0.01" />
+    <arg name="update_rate" value="$(arg update_rate)" />
+    <arg name="robot_model" value="amiro_hokuyo.xacro" />
+    <arg name="lid_sensor_pitch" value="0.785" />
+  </include>
+
+  <!-- Start rviz -->
+  <node name="rviz" pkg="rviz" type="rviz" args="-d $(find mapserver)/launch/viz.rviz"/>
+
+</launch>

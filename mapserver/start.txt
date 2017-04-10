@@ -1,0 +1,71 @@
+====== mapserver ======
+
+====== Parsing the stored data using matlab/octave ======
+
+
+  name = "What_height_Timestamp_1487939444000341us_Format_16S_Unit_mm_LayerIdx_0_GridRes_100mm_X_-25.2671m_Y_0.315565m_Z_0m_rows_350_cols_350_.bin"
+  nameSplit = strsplit(name,"_")
+  rows = str2double(nameSplit(shift(strcmp ("rows", nameSplit),1)))
+  cols = str2double(nameSplit(shift(strcmp ("cols", nameSplit),1)))
+  format = nameSplit(shift(strcmp ("Format", nameSplit),1))
+  formatString=""
+  switch (format{1})
+    case "8U"
+      formatString="uint8";
+    case "8S"
+      formatString="int8";
+    case "16U"
+      formatString="uint16";
+    case "16S"
+      formatString="int16";
+    case "32U"
+      formatString="uint32";
+    case "32S"
+      formatString="int32";
+    case "32F"
+      formatString="float32";
+    case "64F"
+      formatString="float64";
+    otherwise
+      error("No known type %s", format);
+  endswitch
+  
+  fd = fopen(name,"rb");
+  surf(reshape(fread(fd,Inf,formatString),[rows, cols]))
+
+  
+  suffix = "What_OGM_Timestamp_431000759us_Format_INT8_Unit_logodds_LayerIdx_-amiro6-ism-cam_GridRes_19mm_X_0m_Y_0m_Z_0m_rows_300_cols_300_.bin"
+  %suffix = "What_OGM_Timestamp_431000759us_Format_INT8_Unit_logodds_LayerIdx_-amiro6-ism-laser_GridRes_19mm_X_0m_Y_0m_Z_0m_rows_300_cols_300_.bin"
+  name = ["/tmp/", suffix];
+  nameSplit = strsplit(name,"_");
+  rows = str2double(nameSplit(shift(strcmp ("rows", nameSplit),1)));
+  cols = str2double(nameSplit(shift(strcmp ("cols", nameSplit),1)));
+  format = nameSplit(shift(strcmp ("Format", nameSplit),1));
+  formatString="";
+  switch (format{1})
+    case "8U"
+      formatString="uint8";
+    case "INT8"
+      formatString="int8";
+    case "int8"
+      formatString="int8";
+    case "8S"
+      formatString="int8";
+    case "16U"
+      formatString="uint16";
+    case "16S"
+      formatString="int16";
+    case "32U"
+      formatString="uint32";                                                                                                              
+    case "32S"                                                                                                                            
+      formatString="int32";                                                                                                               
+    case "32F"                                                                                                                            
+      formatString="float32";                                                                                                             
+    case "64F"
+      formatString="float64";
+    otherwise
+      error("No known type %s", format);
+  endswitch
+
+  fd = fopen(name,"rb");
+  surf(reshape(fread(fd,Inf,formatString),[rows, cols]));
