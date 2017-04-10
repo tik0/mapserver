@@ -69,6 +69,7 @@
   <build_depend>mrpt_localization</build_depend>
   <build_depend>mrpt_tutorials</build_depend>
   <build_depend>mrpt_ekf_slam_3d</build_depend>
+  <build_depend>nav_msgs</build_depend>
   <run_depend>rosapi</run_depend>
   <run_depend>nav_msgs</run_depend>
   <run_depend>roscpp</run_depend>
@@ -98,6 +99,7 @@
   <run_depend>mrpt_localization</run_depend>
   <run_depend>mrpt_tutorials</run_depend>
   <run_depend>mrpt_ekf_slam_3d</run_depend>
+  <run_depend>nav_msgs</run_depend>
 
   <!-- The export tag contains other, unspecified, tags -->
   <export>

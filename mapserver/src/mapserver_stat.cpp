@@ -34,6 +34,7 @@ std::mutex mtxSwap, mtxShowRpc, mtxShowIsm;
 #include <rosgraph_msgs/Log.h>
 #include <tf/transform_listener.h>
 #include <mapserver/rsm.h>
+#include <mapserver/ismStackFloat.h>
 #include <tf_conversions/tf_eigen.h>
 #include <rosapi/Topics.h>
 #include <nav_msgs/Odometry.h>
@@ -1530,6 +1531,65 @@ void formatAndSendGrid(std::vector<std::string> &list,
 //}
 
 
+void addMapToResponse(std::string name, mrpt::maps::COccupancyGridMap2D* map, mapserver::ismStackFloat::Response &response) {
+  if (map == NULL) {
+      ROS_WARN("Map pointer empty");
+      return;
+  }
+
+  response.response.mapNames.strings.resize(response.response.mapNames.strings.size() + 1);
+  response.response.mapStack.resize(response.response.mapStack.size() + 1);
+
+  const std::size_t numCells = map->getSizeX() * map->getSizeY();
+  // Copy the cells
+  auto mapRes = (response.response.mapStack.end()-1);
+  mapRes->mapFloat.resize(numCells);
+  for (int idx = 0; idx < numCells; ++idx) {
+      int xIdx = idx % map->getSizeX();
+      int yIdx = idx / map->getSizeX();
+      mapRes->mapFloat.at(map->getCell(xIdx, yIdx));
+  }
+
+  mapRes->header.stamp = ros::Time::now();
+  mapRes->info.height = map->getSizeY();
+  mapRes->info.width = map->getSizeX();
+  const tf::Pose pose = tf::Pose(tf::Quaternion(0,0,0,1));
+  tf::poseTFToMsg(pose, mapRes->info.origin);
+  mapRes->info.resolution = map->getResolution();
+}
+
+bool mapStatServerMapStack(mapserver::ismStackFloat::Request &req, mapserver::ismStackFloat::Response &res) {
+  mapRefresh.lock();
+  auto mapStack = currentMapStack;
+  std::string tileName = currentTileTfName;
+  mapRefresh.unlock();
+
+  ROS_INFO( "statMapserver-mapStack method called" );
+  if (req.request.strings.empty()) {
+      ROS_INFO( "Respond the full map stack" );
+      for (auto it=mapStack->begin(); it!=mapStack->end(); ++it) {
+          addMapToResponse(it->first, it->second, res);
+      }
+  } else {
+      for (auto it=req.request.strings.begin(); it!=req.request.strings.end(); ++it) {
+          auto itMapStack = mapStack->find(*it);
+          if (itMapStack != mapStack->end()) {
+              addMapToResponse(itMapStack->first, itMapStack->second, res);
+          }
+      }
+  }
+
+
+  res.response.header.frame_id = tileName + tileOriginTfSufixForRoiOrigin;
+  res.response.header.stamp = ros::Time::now();
+  for (auto it = res.response.mapStack.begin(); it != res.response.mapStack.end(); ++it) {
+      it->header.frame_id = res.response.header.frame_id;
+  }
+  ROS_INFO( "statMapserver-mapStack method called: Finish" );
+  return true;
+}
+
+
 int main(int argc, char **argv){
 
   // ROS
@@ -1636,6 +1696,8 @@ int main(int argc, char **argv){
   // Prepare ROS service
   // TODO: Do this on demand for given subscribed topics
   const std::string s("/");
+  ros::ServiceServer service_mapStack     = n.advertiseService("/reqMapStack"/*scopes::map::statServer::parent + s + scopes::map::statServer::requests::mapStack*/, mapStatServerMapStack);
+
 //  ros::ServiceServer service_singleLayerOgm = n.advertiseService(scopes::map::ogmServer::parent + s + scopes::map::ogmServer::requests::compressedMapImage , mapServerCompressedMap);
 //  ros::ServiceServer service_singleLayerOgm = n.advertiseService(scopes::map::ogmServer::parent + s + scopes::map::ogmServer::requests::stockEdge , mapServerStockEdge);
 //  ros::ServiceServer service_singleLayerOgm = n.advertiseService(scopes::map::ogmServer::parent + s + scopes::map::ogmServer::requests::singleLayerOgm , mapServerSingleLayerOgm);

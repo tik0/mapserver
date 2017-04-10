@@ -9,6 +9,7 @@ find_package(catkin REQUIRED COMPONENTS
   rosapi
   roscpp
   rospy
+  nav_msgs
   sensor_msgs
   mapserver_msgs
   std_msgs
@@ -86,6 +87,7 @@ find_package(Boost REQUIRED COMPONENTS)
 add_service_files(
   FILES
   rsm.srv
+  ismStackFloat.srv
 )
 
 ## Generate actions in the 'action' folder
@@ -101,6 +103,7 @@ generate_messages(
   mapserver_msgs
   std_msgs
   geometry_msgs
+  nav_msgs
 )
 
 ################################################

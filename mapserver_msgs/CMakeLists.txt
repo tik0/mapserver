@@ -5,7 +5,7 @@ project(mapserver_msgs)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
-  roscpp rospy std_msgs geometry_msgs message_generation
+  roscpp rospy std_msgs geometry_msgs nav_msgs message_generation
 )
 
 ## System dependencies are found with CMake's conventions
@@ -48,6 +48,9 @@ add_message_files(
   mapPrimitive.msg
   rsm.msg
   sensorGrid.msg
+  InverseSensorModelFloatArray.msg
+  InverseSensorModelFloat.msg
+  StringArray.msg
 )
 
 ## Generate services in the 'srv' folder
@@ -69,6 +72,7 @@ generate_messages(
   DEPENDENCIES
   std_msgs
   geometry_msgs
+  nav_msgs
 )
 
 ################################################

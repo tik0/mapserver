@@ -1,0 +1,3 @@
+mapserver_msgs/StringArray request
+---
+mapserver_msgs/InverseSensorModelFloatArray response
