@@ -250,6 +250,13 @@ target_link_libraries(mapserver_raw_rpc_test
   ${Boost_LIBRARIES}
 )
 
+add_executable(mapserver_stat_rpc_mapStack_test src/mapserver_stat_rpc_mapStack_test.cpp)
+target_link_libraries(mapserver_stat_rpc_mapStack_test
+  ${catkin_LIBRARIES}
+  ${OpenCV_LIBRARIES}
+  ${Boost_LIBRARIES}
+)
+
 add_executable(mapserver_stat src/mapserver_stat.cpp)
 target_link_libraries(mapserver_stat
   ${catkin_LIBRARIES}

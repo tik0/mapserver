@@ -1531,7 +1531,7 @@ void formatAndSendGrid(std::vector<std::string> &list,
 //}
 
 
-void addMapToResponse(std::string name, mrpt::maps::COccupancyGridMap2D* map, mapserver::ismStackFloat::Response &response) {
+void addMapToResponse(const std::string &name, mrpt::maps::COccupancyGridMap2D* map, mapserver::ismStackFloat::Response &response) {
   if (map == NULL) {
       ROS_WARN("Map pointer empty");
       return;
@@ -1540,6 +1540,9 @@ void addMapToResponse(std::string name, mrpt::maps::COccupancyGridMap2D* map, ma
   response.response.mapNames.strings.resize(response.response.mapNames.strings.size() + 1);
   response.response.mapStack.resize(response.response.mapStack.size() + 1);
 
+  auto mapName = response.response.mapNames.strings.end()-1;
+  *mapName = name;
+
   const std::size_t numCells = map->getSizeX() * map->getSizeY();
   // Copy the cells
   auto mapRes = (response.response.mapStack.end()-1);
@@ -1547,7 +1550,7 @@ void addMapToResponse(std::string name, mrpt::maps::COccupancyGridMap2D* map, ma
   for (int idx = 0; idx < numCells; ++idx) {
       int xIdx = idx % map->getSizeX();
       int yIdx = idx / map->getSizeX();
-      mapRes->map.at(map->getCell(xIdx, yIdx));
+      mapRes->map.at(idx) = map->getCell(xIdx, yIdx);
   }
 
   mapRes->header.stamp = ros::Time::now();
