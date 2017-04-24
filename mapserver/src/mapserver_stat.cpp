@@ -527,6 +527,16 @@ sensor_msgs::PointCloud::Ptr ogmCellsToPointCloud(const nav_msgs::OccupancyGrid:
 
 }
 
+void correctInvalidOrientation(tf::Pose &pose) {
+  if (pose.getRotation().x() < tf::QUATERNION_TOLERANCE &&
+      pose.getRotation().y() < tf::QUATERNION_TOLERANCE &&
+      pose.getRotation().z() < tf::QUATERNION_TOLERANCE &&
+      pose.getRotation().w() < tf::QUATERNION_TOLERANCE) {
+      ROS_WARN_ONCE("correctInvalidOrientation: Pose with quaternion(0,0,0,0) detected. Interpretation as (0,0,0,1)");
+      pose.setRotation(tf::Quaternion(0,0,0,1));
+    }
+}
+
 ///
 /// \brief Returns the coordinates of the four corner points of the OGM in the given frame
 /// \param ogm The OGM which cell coordinates are converted to points
@@ -545,6 +555,7 @@ std::shared_ptr<std::vector<tf::Point>> getOgmCornerPoints(const nav_msgs::Occup
   } else {
       // Get the pose in the target frame
       tf::Pose ogmOriginPose; tf::poseMsgToTF(ogm->info.origin, ogmOriginPose);
+      correctInvalidOrientation(ogmOriginPose);
       std::shared_ptr<tf::Stamped<tf::Pose>> ogmOriginInTargetFrame = getPoseInFrame(tf::Stamped<tf::Pose>(ogmOriginPose, ogm->header.stamp, ogm->header.frame_id), targetFrame, tfListener);
       // Start calculating the transform
       if (ogmOriginInTargetFrame) {
@@ -716,11 +727,16 @@ nav_msgs::OccupancyGrid::ConstPtr ogmTf(const nav_msgs::OccupancyGrid::ConstPtr 
 
   nav_msgs::OccupancyGrid::Ptr ogmTf;
 
-  // TODO Check for XY shift, which can be easily calulcated (Just shift the pose in xy and maybe check for resolution)
+  // TODO Check for XY shift, which can be easily calculated (Just shift the pose in xy and maybe check for resolution)
+
+
+
+  // Sanity check for invalid orientation
+  tf::Pose ogmOriginPose; tf::poseMsgToTF(ogm->info.origin, ogmOriginPose);
+  correctInvalidOrientation(ogmOriginPose);
 
   // First check, if pose and resolution are the same, to minimize workload
-  tf::Pose ogmPose; tf::poseMsgToTF(ogm->info.origin, ogmPose);
-  if (ogmPose == targetOrigin) {
+  if (ogmOriginPose == targetOrigin) {
       const bool resolutionIsSame = compare(targetResolution, ogm->info.resolution, min(ogm->info.resolution, targetResolution) / 2 );
       if (!resolutionIsSame) { // Scale the OGM
           ROS_DEBUG("Pose is the same: Just change the resolution of the OGM");
@@ -733,7 +749,7 @@ nav_msgs::OccupancyGrid::ConstPtr ogmTf(const nav_msgs::OccupancyGrid::ConstPtr 
   } else { // Do a full transform of the OGM
     // First get the metric coordinates of the four corner points in the target and source frame
     std::shared_ptr<std::vector<tf::Point>> pointsInTargetFrame = getOgmCornerPoints(ogm, targetOrigin, tfListener);
-    tf::Pose ogmOriginPose; tf::poseMsgToTF(ogm->info.origin, ogmOriginPose);
+//    tf::Pose ogmOriginPose; tf::poseMsgToTF(ogm->info.origin, ogmOriginPose);
     std::shared_ptr<std::vector<tf::Point>> pointsInSourceFrame = getOgmCornerPoints(ogm, tf::Stamped<tf::Pose>(ogmOriginPose, ogm->header.stamp, ogm->header.frame_id), tfListener);
     // Calculate the homography
     if (pointsInTargetFrame && pointsInSourceFrame) {
