@@ -28,6 +28,7 @@ std::mutex mtxSwap, mtxShowRpc, mtxShowIsm;
 #include <ros/console.h>
 #include <nav_msgs/OccupancyGrid.h>
 #include <std_msgs/String.h>
+#include <mapserver_msgs/pnsTuple.h>
 #include <geometry_msgs/PoseArray.h>
 #include <geometry_msgs/Point.h>
 #include <sensor_msgs/PointCloud.h>
@@ -45,7 +46,7 @@ std::mutex mtxSwap, mtxShowRpc, mtxShowIsm;
 #include <ros/duration.h>
 
 ros::Publisher publisherMap, publisherIsmAsPointCloud, publisherIsmAsOgm;
-ros::Subscriber subscriberIsm, subscriberTfTileName, subscriberStoreMaps;
+ros::Subscriber subscriberIsm, subscriberTfTileName, subscriberStoreMaps, subscriberTuple;
 tf::TransformListener *listenerTf;
 
 // OpenCV
@@ -82,7 +83,7 @@ static std::string mapScopes[mappingLayers::NUM_MAPS];
 // Program options
   // Properties of a single occupancy grid map
   static std::string currentTileTfName(""), lastTileTfName("");
-  static std::string topicMap, topicLaser, tileOriginTfPrefix, tileOriginTfSufixForRoiOrigin, currentTfNameTopic, worldLink, storeMapsTopic, reqTopicMapStack;
+  static std::string topicMap, topicLaser, tileOriginTfPrefix, tileOriginTfSufixForRoiOrigin, currentTfNameTopic, currentTupleTopic, worldLink, storeMapsTopic, reqTopicMapStack;
   static double idleStartupTime_s;
   static double resolution = mapping::discreteResolution;
   static float maxOccupancyUpdateCertainty = mapping::ogm::maxOccupancyUpdateCertainty;
@@ -262,7 +263,8 @@ void mapRefreshAndStorage(const std::shared_ptr<std::map<std::string, mrpt::maps
                           const bool shiftMapStack,
                           const bool clearMapStack,
                           T fillValue = 0.5f,
-                          bool storeCurrentPosition = true) {
+                          bool storeCurrentPosition = true,
+                          std::string additionalInformationString = std::string("")) {
 
   // The message from the last time the function was called (So it is the location of the center)
   static tf::StampedTransform transformRoiInWorldLast;
@@ -304,6 +306,7 @@ void mapRefreshAndStorage(const std::shared_ptr<std::map<std::string, mrpt::maps
           << "Z_" << transformRoiInWorldLast.getOrigin().z() << "m_"
           << "rows_" << it->second->getSizeY() << "_"
           << "cols_" << it->second->getSizeX() << "_"
+          << additionalInformationString << "_"
           << ".bin";
 
       ROS_ERROR("Store map to: %s\n"
@@ -1382,6 +1385,72 @@ void tfTileNameHandler(const std_msgs::String nameMsg) {
 
 }
 
+///
+/// \brief Store the current tf tile name and swap the storage
+/// \param msg tuple of position, NavSat, and name name of the current tile tf
+///
+static mapserver_msgs::pnsTuple lastPnsTuple;
+void tupleHandler(const mapserver_msgs::pnsTuple msg) {
+  bool currentTileTfNameChange = false;
+  mapRefresh.lock();
+  if ((msg.string.data.back() != currentTileTfName.back())) {
+      if (currentTileTfName.empty()) {
+          // First round, we bootstrap
+          currentTileTfName = msg.string.data;
+          lastPnsTuple = msg;
+      } else {
+        std::swap(currentMapStack, lastMapStack);
+        lastTileTfName    = currentTileTfName;
+        currentTileTfName = msg.string.data;
+        currentTileTfNameChange = true;
+      }
+  }
+
+  if (currentTileTfNameChange) {
+    ROS_INFO("NEW MAP");
+    tf::StampedTransform transformRoiInWorld;
+    transformRoiInWorld.setOrigin(tf::Vector3(lastPnsTuple.point.x, lastPnsTuple.point.y, lastPnsTuple.point.z));
+    transformRoiInWorld.setRotation(tf::Quaternion(0,0,0,1));
+
+    // Wait until all references are gone
+    std::size_t lockCnt = 0;
+    const std::size_t lockCntMax = 200000; // 2 seconds if we sleep for 10 us
+    while(!(lastMapStack.unique() && currentMapStack.unique())) {
+        usleep(10);
+        if (++lockCnt > lockCntMax) {
+            ROS_ERROR("tfTileNameHandler: Locked for to long, skip storage (maybe deadlock or out if resources?)");
+            mapRefresh.unlock();
+            return;
+        }
+    }
+
+    std::stringstream navSatSs;
+    navSatSs << "lat_" << msg.navsat.latitude << "_"
+        << "lon_" << msg.navsat.longitude << "_"
+        << "alt_" << msg.navsat.altitude;
+
+     mapRefreshAndStorage( lastMapStack,                          // Map to shift/store/reset
+                           currentMapStack,                       // The result of the shifted map
+                           transformRoiInWorld,                   // Transform
+                           std::string("OGM"),                    // Kind of map
+                           std::string(""),                       // Format (empty: Take from type specifier)
+                           std::string("logodds"),                // Unit
+                           def.resolution,                        // Resolution per tile
+                           !dontStoreMaps,                        // Info if maps should be stored
+                           bool(shiftMap),                        // Info if maps should be shifted
+                           !shiftMap,                             // If map is not shifted, reset the content of mapStack
+                           mrpt::maps::COccupancyGridMap2D::p2l(0.5), // Fill-up value (logodds(0.5f) = unknown)
+                           true,
+                           navSatSs.str());
+    // Store the current tile information as next last one
+    lastPnsTuple = msg;
+  }
+
+  mapRefresh.unlock();
+
+
+}
+
 #include <nav_msgs/GridCells.h>
 #include <sensor_msgs/PointCloud2.h>
 
@@ -1618,6 +1687,7 @@ int main(int argc, char **argv){
   n.param<std::string>("tile_origin_tf_prefix", tileOriginTfPrefix, "map_base_link_");
   n.param<std::string>("tile_origin_tf_sufix_for_roi_origin", tileOriginTfSufixForRoiOrigin, machine::frames::names::ROI_ORIGIN);
   n.param<std::string>("current_tf_name_topic", currentTfNameTopic, "/currentTfTile");
+  n.param<std::string>("current_tuple_topic", currentTupleTopic, "");
   n.param<std::string>("world_link", worldLink, "odom");
   n.param<std::string>("store_maps_topic", storeMapsTopic, "/storemaps");
   n.param<std::string>("req_topic_map_stack", reqTopicMapStack, "/reqMapStack");
@@ -1705,7 +1775,11 @@ int main(int argc, char **argv){
   // Prepare subscriber for all future OGM
   listenerTf = new tf::TransformListener;
   std::vector<ros::Subscriber> subIsmList; // List of subscribers TODO Replace by std::map?
-  subscriberTfTileName = n.subscribe<std_msgs::String>(currentTfNameTopic, 2, tfTileNameHandler);
+  if (currentTupleTopic.empty()) {
+      subscriberTfTileName = n.subscribe<std_msgs::String>(currentTfNameTopic, 2, tfTileNameHandler);
+  } else {
+      subscriberTuple = n.subscribe<mapserver_msgs::pnsTuple>(currentTupleTopic, 2, tupleHandler);
+  }
   subscriberStoreMaps = n.subscribe<std_msgs::String>(storeMapsTopic, 1, storeMaps);
 
 

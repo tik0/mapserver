@@ -12,28 +12,36 @@ namespace msNumeric = ms::constants::numeric;
 #include <ros/spinner.h>
 #include <ros/console.h>
 #include <nav_msgs/Odometry.h>
+#include <sensor_msgs/NavSatFix.h>
+#include <mapserver_msgs/pnsTuple.h>
 #include <geometry_msgs/Point.h>
 #include <std_msgs/String.h>
 #include <geometry_msgs/PointStamped.h>
 #include <tf/transform_broadcaster.h>
 #include <tf_conversions/tf_eigen.h>
 #include <ros/duration.h>
+#include <message_filters/subscriber.h>
+#include <message_filters/synchronizer.h>
+#include <message_filters/sync_policies/exact_time.h>
 
 ros::Subscriber subOdom;
 tf::TransformBroadcaster *brTf;
-ros::Publisher currentTileTfNamePublisher;
+typedef message_filters::sync_policies::ExactTime<nav_msgs::Odometry, sensor_msgs::NavSatFix> syncPolicy;
 
 static std::string tileParentTf("odom");
 static std::string tileOriginTfPrefix("map_base_link_");
 static std::string tileOriginTfSufixForRoiOrigin("_ROI_ORIGIN");
 static std::string topicOdom("/bridge/Odom/S10Gps/filtered");
+static std::string topicNavsat("");
 static std::string currentTfNameTopic("/currentTfTile");
+static std::string currentTupleTopic("/currentTuple");
 static double idleStartupTime_s = -1.0;
 static int tfTileHistory = 1, tfPublishRate = 50, tfNamePublishDelay = 10;
 static std::size_t tfNamePublishDelayCounter = 0;
 static int zFix = 1; // Omit altitude
 std::mutex mtx;
-static std::vector<std::tuple<geometry_msgs::Point, std::string> > tileCenterHistory;
+typedef std::tuple<geometry_msgs::Point, sensor_msgs::NavSatFix, std::string> pnsTuple;
+static std::vector<pnsTuple> tileCenterHistory;
 static double boundingBoxWidth;
 static double boundingBoxHeight;
 static double boundingBoxAltitude;
@@ -47,14 +55,11 @@ Eigen::Matrix4d roi_roiOrigin;
 
 enum tupleEnum {
   pos = 0,
-  name = 1
+  nav = 1,
+  name = 2
 };
 
-///
-/// \brief Decides if a tf for a new tile should be created
-/// \param Odometry message to process
-///
-void odomHandler(const nav_msgs::Odometry odomMsg) {
+void messageHandler(const nav_msgs::Odometry odomMsg, const sensor_msgs::NavSatFix navsatMsg = sensor_msgs::NavSatFix()) {
   if (tileParentTf.compare(odomMsg.header.frame_id)) {
       ROS_WARN_ONCE("%s != %s, this might be OK if the two frames coincide",
                     tileParentTf.c_str(), odomMsg.header.frame_id.c_str());
@@ -66,9 +71,9 @@ void odomHandler(const nav_msgs::Odometry odomMsg) {
   ROS_DEBUG("Odom pose x:%f, y:%f, z:%f\n"
             "Tile pose x:%f, y:%f, z:%f\n"
             "Diff      x:%f, y:%f, z:%f",
-	    odomMsg.pose.pose.position.x, odomMsg.pose.pose.position.y, odomMsg.pose.pose.position.z,
-	    std::get<tupleEnum::pos>(tileCenterHistory.back()).x, std::get<tupleEnum::pos>(tileCenterHistory.back()).y, std::get<tupleEnum::pos>(tileCenterHistory.back()).z,
-	    diffX, diffY, diffZ);
+      odomMsg.pose.pose.position.x, odomMsg.pose.pose.position.y, odomMsg.pose.pose.position.z,
+      std::get<tupleEnum::pos>(tileCenterHistory.back()).x, std::get<tupleEnum::pos>(tileCenterHistory.back()).y, std::get<tupleEnum::pos>(tileCenterHistory.back()).z,
+      diffX, diffY, diffZ);
 
   if ( diffX > (boundingBoxWidth / 2.0) ) {
       // Do map reset
@@ -83,48 +88,64 @@ void odomHandler(const nav_msgs::Odometry odomMsg) {
   // Reset the map
   mtx.lock();
   tileCenterHistory.push_back(
-      std::tuple<geometry_msgs::Point, std::string>(
-	  odomMsg.pose.pose.position,
-	  tileOriginTfPrefix + std::to_string(tileCenterHistory.size())));
+      pnsTuple(
+    odomMsg.pose.pose.position,
+    navsatMsg,
+    tileOriginTfPrefix + std::to_string(tileCenterHistory.size())));
   tfNamePublishDelayCounter = 0;
   mtx.unlock();
 }
 
 ///
-/// \brief Send the tile tf history and return
-/// \return The current known tile tf name
+/// \brief Decides if a tf for a new tile should be created
+/// \param Odometry message to process
 ///
-std::string sendTfHistory(void) {
+void odomHandler(const nav_msgs::Odometry::ConstPtr odomMsg) {
+  messageHandler(*odomMsg);
+}
+
+void odomNavsatHandler(const nav_msgs::Odometry::ConstPtr odomMsg, const sensor_msgs::NavSatFix::ConstPtr navsatMsg) {
+  messageHandler(*odomMsg, *navsatMsg);
+}
+
+///
+/// \brief Send the tile tf history and return
+/// \return The current known tile position, navsat, and tf name as tuple
+///
+pnsTuple sendTfHistory(void) {
   tf::StampedTransform tileTf;
   tileTf.frame_id_ = tileParentTf;
   tileTf.setRotation(tf::Quaternion(.0, .0, .0, 1.0));
   tileTf.stamp_ = ros::Time::now();
 
-  // If a history size for sending is defined, the start index is set
-  const std::size_t histSizeStart = tfTileHistory < 0 ? 0 : tileCenterHistory.size() - tfTileHistory - 1;
-  // Send the tf's
   mtx.lock();
-  for (std::size_t idx = histSizeStart; idx < tileCenterHistory.size(); ++idx) {
-    const tf::Vector3 translation(std::get<tupleEnum::pos>(tileCenterHistory.at(idx)).x,
-				  std::get<tupleEnum::pos>(tileCenterHistory.at(idx)).y,
-				  std::get<tupleEnum::pos>(tileCenterHistory.at(idx)).z);
+  auto currentTileCenterHistory = tileCenterHistory;
+  mtx.unlock();
+
+  // If a history size for sending is defined, the start index is set
+  const std::size_t histSizeStart = tfTileHistory < 0 ? 0 : currentTileCenterHistory.size() - tfTileHistory - 1;
+  // Send the tf's
+  for (std::size_t idx = histSizeStart; idx < currentTileCenterHistory.size(); ++idx) {
+    const tf::Vector3 translation(std::get<tupleEnum::pos>(currentTileCenterHistory.at(idx)).x,
+				  std::get<tupleEnum::pos>(currentTileCenterHistory.at(idx)).y,
+				  std::get<tupleEnum::pos>(currentTileCenterHistory.at(idx)).z);
     tileTf.setOrigin(translation);
-    tileTf.child_frame_id_ = std::get<tupleEnum::name>(tileCenterHistory.at(idx));
+    tileTf.child_frame_id_ = std::get<tupleEnum::name>(currentTileCenterHistory.at(idx));
     brTf->sendTransform(tileTf);
     brTf->sendTransform(tf::StampedTransform(utils::conversion::getTfFromEigen(roi_roiOrigin),
 					     tileTf.stamp_,
 					     tileTf.child_frame_id_,
 					     tileTf.child_frame_id_ + tileOriginTfSufixForRoiOrigin));
     ROS_DEBUG("tileCenterHistory: %d/%d, x:%f, y:%f, z:%f, name:%s\n",
-	      int(idx), int(tileCenterHistory.size()),
-	      std::get<tupleEnum::pos>(tileCenterHistory.at(idx)).x,
-	      std::get<tupleEnum::pos>(tileCenterHistory.at(idx)).y,
-	      std::get<tupleEnum::pos>(tileCenterHistory.at(idx)).z,
-	      std::get<tupleEnum::name>(tileCenterHistory.at(idx)).c_str());
+	      int(idx), int(currentTileCenterHistory.size()),
+	      std::get<tupleEnum::pos>(currentTileCenterHistory.at(idx)).x,
+	      std::get<tupleEnum::pos>(currentTileCenterHistory.at(idx)).y,
+	      std::get<tupleEnum::pos>(currentTileCenterHistory.at(idx)).z,
+	      std::get<tupleEnum::name>(currentTileCenterHistory.at(idx)).c_str());
 
   }
-  mtx.unlock();
-  return tileTf.child_frame_id_;
+
+  return *(currentTileCenterHistory.end()-1);
 }
 
 int main(int argc, char **argv)
@@ -137,7 +158,9 @@ int main(int argc, char **argv)
   n.param<std::string>("tile_origin_tf_prefix", tileOriginTfPrefix, "map_base_link_");
   n.param<std::string>("tile_origin_tf_sufix_for_roi_origin", tileOriginTfSufixForRoiOrigin, machine::frames::names::ROI_ORIGIN);
   n.param<std::string>("odometry_topic", topicOdom, "/bridge/Odom/S10Gps/filtered");
+  n.param<std::string>("navsat_topic", topicNavsat, "");
   n.param<std::string>("current_tf_name_topic", currentTfNameTopic, "/currentTfTile");
+  n.param<std::string>("current_tuple_topic", currentTupleTopic, "/currentTuple");
   n.param<double>("idle_startup_time", idleStartupTime_s, -1.0); // Wait before starting publishing (< 0 to disable)
   n.param<int>("tf_tile_history", tfTileHistory, -1); // Number of tiles in the history to publish (< 0 for complete history)
   n.param<int>("tf_publish_rate", tfPublishRate, 50);
@@ -157,14 +180,25 @@ int main(int argc, char **argv)
 
   // Init the history
   tileCenterHistory.push_back(
-      std::tuple<geometry_msgs::Point, std::string>(
-	  geometry_msgs::Point(),
-	  tileOriginTfPrefix + std::string("0")));
+      pnsTuple(
+          geometry_msgs::Point(),
+          sensor_msgs::NavSatFix(),
+          tileOriginTfPrefix + std::string("0")));
 
   // Init tf, publisher, subscriber
   brTf = new tf::TransformBroadcaster;
-  currentTileTfNamePublisher = n.advertise<std_msgs::String>(currentTfNameTopic, 1);
-  subOdom = n.subscribe<nav_msgs::Odometry>(topicOdom, 2, odomHandler);
+  ros::Publisher currentTileTfNamePublisher = n.advertise<std_msgs::String>(currentTfNameTopic, 1);
+  ros::Publisher currentTuplePublisher = n.advertise<mapserver_msgs::pnsTuple>(currentTupleTopic, 1);
+  message_filters::Subscriber<nav_msgs::Odometry> odom_sub(n, topicOdom, 1);
+  message_filters::Subscriber<sensor_msgs::NavSatFix> navsat_sub(n, topicNavsat, 1);
+  message_filters::Synchronizer<syncPolicy> sync(syncPolicy(10), odom_sub, navsat_sub);
+
+  if (topicNavsat.empty()) {
+      ROS_WARN("Don't use NAVSAT messages");
+      subOdom = n.subscribe<nav_msgs::Odometry>(topicOdom, 2, odomHandler);
+  } else {
+      sync.registerCallback(boost::bind(&odomNavsatHandler, _1, _2));
+  }
 
   // Start the processing
   ros::AsyncSpinner spinner(1);
@@ -172,10 +206,20 @@ int main(int argc, char **argv)
   // Do Stuff once a second
   ros::Rate rate(tfPublishRate);
   std_msgs::String currentTfTileName;
+  mapserver_msgs::pnsTuple currentTuple;
   while(ros::ok()) {
-      currentTfTileName.data = sendTfHistory();
+      pnsTuple pns = sendTfHistory();
       if ((++tfNamePublishDelayCounter % tfNamePublishDelay) == 0) {
+        currentTfTileName.data = std::get<tupleEnum::name>(pns);
 	      currentTileTfNamePublisher.publish(currentTfTileName);
+	      if (!topicNavsat.empty()) {
+          currentTuple.header.frame_id = tileParentTf;
+          currentTuple.header.stamp = ros::Time::now();
+          currentTuple.string.data = std::get<tupleEnum::name>(pns);
+          currentTuple.point = std::get<tupleEnum::pos>(pns);
+          currentTuple.navsat = std::get<tupleEnum::nav>(pns);
+	        currentTuplePublisher.publish(currentTuple);
+	      }
 	      tfNamePublishDelayCounter = 0;
       }
       rate.sleep();
