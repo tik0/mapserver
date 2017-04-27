@@ -36,7 +36,8 @@ static std::string topicNavsat("");
 static std::string currentTfNameTopic("/currentTfTile");
 static std::string currentTupleTopic("/currentTuple");
 static double idleStartupTime_s = -1.0;
-static int tfTileHistory = 1, tfPublishRate = 50, tfNamePublishDelay = 10;
+static int tfTileHistory = -1;
+static double tfPublishRate = 50, tfNamePublishDelay = 0.5;
 static std::size_t tfNamePublishDelayCounter = 0;
 static int zFix = 1; // Omit altitude
 std::mutex mtx;
@@ -163,8 +164,8 @@ int main(int argc, char **argv)
   n.param<std::string>("current_tuple_topic", currentTupleTopic, "/currentTuple");
   n.param<double>("idle_startup_time", idleStartupTime_s, -1.0); // Wait before starting publishing (< 0 to disable)
   n.param<int>("tf_tile_history", tfTileHistory, -1); // Number of tiles in the history to publish (< 0 for complete history)
-  n.param<int>("tf_publish_rate", tfPublishRate, 50);
-  n.param<int>("tf_name_publish_delay", tfNamePublishDelay, 10);
+  n.param<double>("tf_publish_rate", tfPublishRate, 50);
+  n.param<double>("tf_name_publish_delay", tfNamePublishDelay, 0.5); // Delay time in seconds to tell everybody to use the new tf frame
   n.param<int>("z_ix", zFix, 1); // Omit altitude for measurements and resetting
   // Parameter for the resetting
   n.param<double>("bounding_box_width", boundingBoxWidth, mapping::roi::boundingbox::width); // (m) Reset boundary in width
@@ -177,6 +178,10 @@ int main(int argc, char **argv)
 
   ROS_INFO("ROI offset x: %f, y: %f, z: %f", roiTooOriginTransWidth, roiTooOriginTransHeight, roiTooOriginTransAltitude);
   ROS_INFO("BB size x: %f, y: %f, z: %f", boundingBoxWidth, boundingBoxHeight, boundingBoxAltitude);
+
+  if (tfNamePublishDelay < std::numeric_limits<double>::epsilon()) {
+      ROS_WARN("It is recommended to set tf_name_publish_delay > 0 to defy race conditions between the new tf and advertisement of using it");
+  }
 
   // Init the history
   tileCenterHistory.push_back(
@@ -205,24 +210,30 @@ int main(int argc, char **argv)
   spinner.start();
   // Do Stuff once a second
   ros::Rate rate(tfPublishRate);
+  pnsTuple pns = sendTfHistory();
   std_msgs::String currentTfTileName;
   mapserver_msgs::pnsTuple currentTuple;
   while(ros::ok()) {
-      pnsTuple pns = sendTfHistory();
-      if ((++tfNamePublishDelayCounter % tfNamePublishDelay) == 0) {
-        currentTfTileName.data = std::get<tupleEnum::name>(pns);
-	      currentTileTfNamePublisher.publish(currentTfTileName);
-	      if (!topicNavsat.empty()) {
-          currentTuple.header.frame_id = tileParentTf;
-          currentTuple.header.stamp = ros::Time::now();
-          currentTuple.string.data = std::get<tupleEnum::name>(pns);
-          currentTuple.point = std::get<tupleEnum::pos>(pns);
-          currentTuple.navsat = std::get<tupleEnum::nav>(pns);
-	        currentTuplePublisher.publish(currentTuple);
-	      }
-	      tfNamePublishDelayCounter = 0;
+
+      // Send the tfs and only refresh the tuple when the delay is over
+      if ((++tfNamePublishDelayCounter / tfPublishRate) >= tfNamePublishDelay) {
+          pns = sendTfHistory();
+      } else {
+          sendTfHistory();
       }
-      rate.sleep();
+
+      // Tell the world which frame to use
+      currentTfTileName.data = std::get<tupleEnum::name>(pns);
+      currentTileTfNamePublisher.publish(currentTfTileName);
+      if (!topicNavsat.empty()) {
+        currentTuple.header.frame_id = tileParentTf;
+        currentTuple.header.stamp = ros::Time::now();
+        currentTuple.string.data = std::get<tupleEnum::name>(pns);
+        currentTuple.point = std::get<tupleEnum::pos>(pns);
+        currentTuple.navsat = std::get<tupleEnum::nav>(pns);
+        currentTuplePublisher.publish(currentTuple);
+      }
+    rate.sleep();
   }
 
   delete brTf;

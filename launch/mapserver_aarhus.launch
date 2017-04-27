@@ -1,0 +1,81 @@
+<?xml version="1.0"?>
+ <launch>
+  <!-- ISM Mapserver -->
+    <!--We assume that the robot is centered in the ROI-->
+  <arg name="roi_width" value="35.0" /> <!-- (m) x -->
+  <arg name="roi_height" value="35.0" /> <!-- (m) y -->
+  <arg name="roi_altitude" value="0.0" /> <!-- (m) z NOT USED-->
+  
+  
+  <!-- Map server -->
+  <!-- This program produces tf'f from the tile_parent_tf to the center of the ROI ( These tf's
+   have the name from tile_origin_tf_prefix: e.g.: map_base_link_#). From here, another tf is produced
+   to a ROI origin for the maps ( For names tile_origin_tf_sufix_for_roi_origin are taken into
+   account: e.g. map_base_link_#_ROI_ORIGIN). As soon as the odometry_topic steps over the
+   bounding_box_*, a new ROI is produced and the number for the tf's "#" is increased.-->
+  <node pkg="mapserver" name="tile_publisher" type="tile_publisher" output="screen">
+    <param name="tile_origin_tf_prefix" type="string" value="map_base_link_" />
+    <param name="tile_origin_tf_sufix_for_roi_origin" type="string" value="_ROI_ORIGIN" />
+    <param name="tile_parent_tf" type="string" value="odom" />
+    <param name="odometry_topic" type="string" value="/odometry/filtered" />
+    <param name="navsat_topic" type="string" value="/gps/filtered/utm" />
+    <param name="roi_too_origin_trans_width" value="$(eval -arg('roi_width') / 2)" />
+    <param name="roi_too_origin_trans_height" value="$(eval -arg('roi_height') / 2)" />
+    <param name="roi_too_origin_trans_altitude" value="$(eval -arg('roi_altitude') / 2)" />
+    <param name="bounding_box_width" value="$(eval arg('roi_width') / 3)" />
+    <param name="bounding_box_height" value="$(eval arg('roi_height') / 3)" />
+    <param name="bounding_box_altitude" value="$(eval arg('roi_altitude') / 3)" />
+    <param name="tf_publish_rate" value="50" />
+    <!-- tf_name_publish_delay is one of the most crucial parameters. It is the difference in seconds between sending
+    the new tf tree and the reference name to it. The delay means, that all listening process get some time to build
+    up their tf tree for the new map tile, because their might be sensor messages which are delayed due to processing.
+    If for instance an delayed sensor message arrives, it can not be transformed because extrapolation in the past is 
+    not possible (Note: For extrapolation in the future one has just to wait).
+    -->
+    <param name="tf_name_publish_delay" value="2.0" />
+    <param name="tf_tile_history" value="-1" />
+  </node>
+
+<!--  <node pkg="mapserver" name="mapserver_raw" type="mapserver_raw">
+    world_link
+    <param name="world_link" type="string" value="world" />
+    <param name="tile_origin_tf_prefix" type="string" value="map_base_link_" />
+    <param name="tile_origin_tf_sufix_for_roi_origin" type="string" value="_ROI_ORIGIN" />
+    <param name="shift_map" type="int" value="1" />
+    <param name="topic_laser" type="string" value="amiro5/laser/scan" />
+    <param name="dont_store_maps" type="int" value="1" />
+    <param name="send_top_layer_of_distancestack_as_ogm" type="int" value="1" />
+    <param name="debug" type="int" value="0" />
+    <param name="debug_draw_rpc_in_view" type="int" value="0" />
+    <param name="max_x_m" value="$(eval arg('roi_width') / 2)" />
+    <param name="max_y_m" value="$(eval arg('roi_height') / 2)" />
+    <param name="min_x_m" value="$(eval -arg('roi_width') / 2)" />
+    <param name="min_y_m" value="$(eval -arg('roi_height') / 2)" />
+  </node>-->
+  
+  <node pkg="mapserver" name="mapserver_stat" type="mapserver_stat" respawn="true" output="screen">
+    <param name="tile_origin_tf_prefix" type="string" value="map_base_link_" />
+    <param name="tile_origin_tf_sufix_for_roi_origin" type="string" value="_ROI_ORIGIN" />
+    <param name="current_tf_name_topic" type="string" value="/currentTfTile" />
+<!--     <param name="current_tuple_topic" type="string" value="/currentTuple" /> -->
+    <param name="world_link" type="string" value="odom" />
+    <param name="resolution" value="0.02" />
+    <param name="maxOccupancyUpdateCertainty" value="255" />
+    <param name="max_distance_insertion" value="10" />
+    <param name="ism_scope_prefix" type="string" value="/ism" />
+    <param name="shift_map" type="int" value="1" />
+    <param name="dont_store_maps" type="int" value="0" />
+    <param name="debug" type="int" value="1" />
+    <param name="debug_topic" value="/ism/cam" />
+    <param name="debug_ism_topic" value="/ism/radar/tracking/radar_return" />
+    <param name="debug_draw_rpc_in_view" type="int" value="0" />
+    <param name="max_x_m" value="$(eval arg('roi_width') / 2)" />
+    <param name="max_y_m" value="$(eval arg('roi_height') / 2)" />
+    <param name="min_x_m" value="$(eval -arg('roi_width') / 2)" />
+    <param name="min_y_m" value="$(eval -arg('roi_height') / 2)" />
+    <param name="rate" value="10" />
+    <param name="map_storage_location" value="/tmp/" />
+  </node>
+
+ </launch>
+

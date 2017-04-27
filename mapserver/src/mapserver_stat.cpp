@@ -83,7 +83,7 @@ static std::string mapScopes[mappingLayers::NUM_MAPS];
 // Program options
   // Properties of a single occupancy grid map
   static std::string currentTileTfName(""), lastTileTfName("");
-  static std::string topicMap, topicLaser, tileOriginTfPrefix, tileOriginTfSufixForRoiOrigin, currentTfNameTopic, currentTupleTopic, worldLink, storeMapsTopic, reqTopicMapStack;
+  static std::string topicMap, topicLaser, tileOriginTfPrefix, tileOriginTfSufixForRoiOrigin, currentTfNameTopic, currentTupleTopic, worldLink, storeMapsTopic, reqTopicMapStack, debugIsmTopic;
   static double idleStartupTime_s;
   static double resolution = mapping::discreteResolution;
   static float maxOccupancyUpdateCertainty = mapping::ogm::maxOccupancyUpdateCertainty;
@@ -276,8 +276,8 @@ void mapRefreshAndStorage(const std::shared_ptr<std::map<std::string, mrpt::maps
 //      runOnce = false;
 //  }
 
-  ROS_ERROR("storeMapStack: %d", storeMapStack);
-  ROS_ERROR("mapStack->size(): %d", mapStack->size());
+  ROS_INFO("storeMapStack: %d", storeMapStack);
+  ROS_INFO("mapStack->size(): %d", mapStack->size());
   if (storeMapStack) {
     // Get the timestamp in microseconds
 //    ros::Time stamp = ros::Time::now();
@@ -294,13 +294,14 @@ void mapRefreshAndStorage(const std::shared_ptr<std::map<std::string, mrpt::maps
 
       // Get the filename
       std::ostringstream oss;
-      oss << mapStorageLocation
+      oss << std::setprecision(2)
+          << mapStorageLocation
           << "What_" << prefixString << "_"
-          << "Timestamp_" << ros::Time::now() << "s.ns_"
+          << "T_" << ros::Time::now() << "s.ns_"
           << "Format_" << format << "_"
           << "Unit_" << formatUnitString << "_"
-          << "LayerIdx_" << mapIdx << "_"
-          << "GridRes_" << int(round(resolution_meterPerTile * double(geometry::millimeterPerMeter))) <<  "mm_"
+          << "Layer_" << mapIdx << "_"
+          << "Res_" << int(round(resolution_meterPerTile * double(geometry::millimeterPerMeter))) <<  "mm_"
           << "X_" << transformRoiInWorldLast.getOrigin().x() << "m_"
           << "Y_" << transformRoiInWorldLast.getOrigin().y() << "m_"
           << "Z_" << transformRoiInWorldLast.getOrigin().z() << "m_"
@@ -309,8 +310,7 @@ void mapRefreshAndStorage(const std::shared_ptr<std::map<std::string, mrpt::maps
           << additionalInformationString << "_"
           << ".bin";
 
-      ROS_ERROR("Store map to: %s\n"
-                "With format: %s\n", oss.str().c_str(), format);
+      ROS_INFO("Store map to: %s\nWith format: %s\n", oss.str().c_str(), format.c_str());
 
       // Store the layer
       std::ofstream f;
@@ -328,14 +328,24 @@ void mapRefreshAndStorage(const std::shared_ptr<std::map<std::string, mrpt::maps
   // Shift the map
   if (shiftMapStack) {
     // Calculate the shift as indices
-    ROS_ERROR("World (x,y,z): %f, %f, %f", transformRoiInWorld.getOrigin().x(), transformRoiInWorld.getOrigin().y(), transformRoiInWorld.getOrigin().z());
-    ROS_ERROR("Last (x,y,z): %f, %f, %f", transformRoiInWorldLast.getOrigin().x(), transformRoiInWorldLast.getOrigin().y(), transformRoiInWorldLast.getOrigin().z());
+    const double xdiff_m = transformRoiInWorldLast.getOrigin().x() - transformRoiInWorld.getOrigin().x();
+    const double ydiff_m = transformRoiInWorldLast.getOrigin().y() - transformRoiInWorld.getOrigin().y();
+    const double zdiff_m = transformRoiInWorldLast.getOrigin().y() - transformRoiInWorld.getOrigin().y();
 
-    const int xshift_tiles = int(-(transformRoiInWorldLast.getOrigin().x() - transformRoiInWorld.getOrigin().x()) / resolution_meterPerTile);
-    const int yshift_tiles = int(-(transformRoiInWorldLast.getOrigin().y() - transformRoiInWorld.getOrigin().y()) / resolution_meterPerTile);
+    ROS_INFO("Current (x,y,z) in m: %f, %f, %f", transformRoiInWorld.getOrigin().x(), transformRoiInWorld.getOrigin().y(), transformRoiInWorld.getOrigin().z());
+    ROS_INFO("Last    (x,y,z) in m: %f, %f, %f", transformRoiInWorldLast.getOrigin().x(), transformRoiInWorldLast.getOrigin().y(), transformRoiInWorldLast.getOrigin().z());
+    ROS_INFO("Diff    (x,y,z) in m: %f, %f, %f", xdiff_m, ydiff_m, zdiff_m);
 
-    ROS_ERROR("Shift of the map measured in tiles: x= %d, y= %d", xshift_tiles, yshift_tiles);
+    const int xshift_tiles = int(std::round(xdiff_m / resolution_meterPerTile));
+    const int yshift_tiles = int(std::round(ydiff_m / resolution_meterPerTile));
 
+//    ROS_INFO_STREAM( "\nydiff_m: " << ydiff_m <<
+//                     "\nresolution_meterPerTile: " << resolution_meterPerTile <<
+//                     "\nydiff_m / resolution_meterPerTile: " << ydiff_m / resolution_meterPerTile <<
+//                     "\n-ydiff_m / resolution_meterPerTile: " << ydiff_m / resolution_meterPerTile <<
+//                     "\n-ydiff_m / resolution_meterPerTile: " << ydiff_m / resolution_meterPerTile);
+
+    ROS_ERROR("Shift of the map (res: %0.2f m/tile): x=%d tiles s.t. %f m , y=%d tiles s.t. %f m", resolution_meterPerTile, xshift_tiles, -xdiff_m, yshift_tiles, -ydiff_m);
 
     auto itDst = mapStackShiftedResult->begin();
     for (auto itSrc=mapStack->begin(); itSrc!=mapStack->end(); ++itSrc, ++itDst) {
@@ -409,11 +419,23 @@ std::shared_ptr<tf::Stamped<tf::Pose>> getPoseInFrame(const tf::Stamped<tf::Pose
   bool tfSuccess = true;
   if (!useSrcFrameAsDstFrame) { // We don't need this, if we stay in the same frame
     try {
-      tfListener.waitForTransform(dstFrame, srcFrame, poseInSourceFrame.stamp_, ros::Duration(3.0));
-      tfListener.transformPose(dstFrame, poseInSourceFrame, poseInTargetFrame);
+      // HACK We don't wait for tf messages in the past, because they will never arrive at all
+      std::string errorMsg;
+      const std::string errorMsgWorthitToWaitFor("Lookup would require extrapolation into the future");
+      tfListener.canTransform(dstFrame, srcFrame, poseInSourceFrame.stamp_, &errorMsg);
+      std::size_t found = errorMsg.find(errorMsgWorthitToWaitFor);
+      if (found != std::string::npos || errorMsg.empty()) {
+          if (found != std::string::npos) {
+              ROS_DEBUG_STREAM("getPoseInFrame: We'll wait for tf transform messages in the future: " << errorMsg);
+              tfListener.waitForTransform(dstFrame, srcFrame, poseInSourceFrame.stamp_, ros::Duration(3.0));
+          }
+          tfListener.transformPose(dstFrame, poseInSourceFrame, poseInTargetFrame);
+      } else {
+          throw(errorMsg);
+      }
     } catch(const std::exception &exc) {
       const std::string excStr(exc.what());
-      ROS_ERROR("getPoseInFrame: %s", excStr.c_str());
+      ROS_ERROR("getPoseInFrame (%s -> %s): %s", srcFrame.c_str(), dstFrame.c_str(), excStr.c_str());
       tfSuccess = false;
     }
   } else {
@@ -743,7 +765,6 @@ nav_msgs::OccupancyGrid::ConstPtr ogmTf(const nav_msgs::OccupancyGrid::ConstPtr 
       const bool resolutionIsSame = compare(targetResolution, ogm->info.resolution, min(ogm->info.resolution, targetResolution) / 2 );
       if (!resolutionIsSame) { // Scale the OGM
           ROS_DEBUG("Pose is the same: Just change the resolution of the OGM");
-          ROS_ERROR("2");
           return ogmResize(ogm, targetResolution);
       } else {
           ROS_DEBUG("Pose and resolution are the same: Just return the original OGM");
@@ -1010,11 +1031,13 @@ void doIsmFusion(const nav_msgs::OccupancyGrid::ConstPtr &msg, const std::string
       ROS_ERROR("OGM has no size");
       return;
   } else {
-      ROS_DEBUG("OK: Do the sensor fusion");
+      ROS_ERROR("OK: Do the sensor fusion");
   }
 
   if (debug) {
-      publisherIsmAsOgm.publish(ogmTransformed);
+      if (!topic.compare(debugIsmTopic)) {
+        publisherIsmAsOgm.publish(ogmTransformed);
+      }
       // Send OGM as point cloud
       //      sensor_msgs::PointCloudPtr ogmPtCloud = ogmCellsToPointCloud(msg, "world", *listenerTf, 0, 0, msg->info.width, msg->info.height);
       //      if(ogmPtCloud) {
@@ -1037,9 +1060,10 @@ void doIsmFusion(const nav_msgs::OccupancyGrid::ConstPtr &msg, const std::string
   const float transY = ogmTransformed->info.origin.position.y;
   const float transZ = ogmTransformed->info.origin.position.z;
 
-  ROS_DEBUG("\nEverything should be OK, if the pose is 0,0,0 and the frames are the same:");
-  ROS_DEBUG("  ISM coordinate x, y, z, frame_id: %f, %f, %f, %s\n", transX, transY, transZ, ogmTransformed->header.frame_id);
-  ROS_DEBUG("  OGM frame name: %s\n\n", targetPose.frame_id_.c_str());
+  ROS_DEBUG("\n  Everything should be OK, if the pose is 0,0,0 and the frames are the same:"
+            "  ISM coordinate x, y, z, frame_id: %f, %f, %f, %s\n"
+            "  OGM frame name: %s\n\n",
+            transX, transY, transZ, ogmTransformed->header.frame_id, targetPose.frame_id_.c_str());
 
 //  const int mapCenterX = int((def.max_x - def.min_x) / def.resolution / 2.0);
 //  const int mapCenterY = int((def.max_y - def.min_y) / def.resolution / 2.0);
@@ -1346,8 +1370,8 @@ void tfTileNameHandler(const std_msgs::String nameMsg) {
   if (currentTileTfNameChange) {
     tf::StampedTransform transformRoiInWorld;
     try {
-      listenerTf->waitForTransform(lastTileTfName, worldLink, ros::Time(0.0), ros::Duration(3.0));
-      listenerTf->lookupTransform(lastTileTfName, worldLink, ros::Time(0.0), transformRoiInWorld);
+      listenerTf->waitForTransform(worldLink, lastTileTfName, ros::Time(0.0), ros::Duration(3.0));
+      listenerTf->lookupTransform(worldLink, lastTileTfName, ros::Time(0.0), transformRoiInWorld);
     } catch(const std::exception &exc) {
       const std::string excStr(exc.what());
       ROS_ERROR("tfTileNameHandler: %s", excStr.c_str());
@@ -1425,7 +1449,8 @@ void tupleHandler(const mapserver_msgs::pnsTuple msg) {
     }
 
     std::stringstream navSatSs;
-    navSatSs << "lat_" << msg.navsat.latitude << "_"
+    navSatSs << std::setprecision(12)
+        << "lat_" << msg.navsat.latitude << "_"
         << "lon_" << msg.navsat.longitude << "_"
         << "alt_" << msg.navsat.altitude;
 
@@ -1464,7 +1489,7 @@ void formatAndSendGrid(std::vector<std::string> &list,
                        std::string topicSufixPointCloud = "/pointCloud") {
   const char fName[] = "formatAndSendGrid";
   const float gridSpacing_m = 0.01;
-  const float minDrawOccupancyUpdateCertainty = 0.6;
+  const float minDrawOccupancyUpdateCertainty = 0.5;
 
   // Sanity checks
   if (frame.empty()) {
@@ -1542,7 +1567,7 @@ void formatAndSendGrid(std::vector<std::string> &list,
       for (int idy = 0; idy < mapIt->second->getSizeY(); ++idy) {
         for (int idx = 0; idx < mapIt->second->getSizeX(); ++idx) {
             // We get values from 0 .. 100
-            if (mapIt->second->getCell(idx, idy) >=  minDrawOccupancyUpdateCertainty) {
+            if (mapIt->second->getCell(idx, idy) >  minDrawOccupancyUpdateCertainty) {
               pointTf[0] = (float(idx) * resolution);
               pointTf[1] = (float(idy) * resolution);
               pointTf[2] = float(idxIt) * gridSpacing_m;  // Overlay each layer by some distance
@@ -1694,6 +1719,7 @@ int main(int argc, char **argv){
   n.param<double>("idle_startup_time", idleStartupTime_s, -1.0); // Wait before mapping (< 0 to disable)
 
   n.param<int>("debug", debug, 0); // Enable debug outputs
+  n.param<std::string>("debug_ism_topic", debugIsmTopic, "/ism/radar/tracking/radar_return"); // The topic of the ISM which is resend as transformed ISM in the mapserver frame
   std::string debugTopic;
   n.param<std::string>("debug_topic", debugTopic, "/amiro2/ism/cam"); // The topic of the fused map to show via opencv
   n.param<int>("test", doTest, 0); // Enable testing
@@ -1785,7 +1811,7 @@ int main(int argc, char **argv){
 
 
   publisherIsmAsPointCloud = n.advertise<sensor_msgs::PointCloud>("foo",1);
-  publisherIsmAsOgm = n.advertise<nav_msgs::OccupancyGrid>("bar",1);
+  publisherIsmAsOgm = n.advertise<nav_msgs::OccupancyGrid>(std::string("debug") + debugIsmTopic,1);
 
   // Prepare ROS service
   // TODO: Do this on demand for given subscribed topics
@@ -1816,7 +1842,7 @@ int main(int argc, char **argv){
                   cv::waitKey(1); // Update the window
               }
         } catch (...) {
-            ROS_DEBUG("Debug visualization: No such topic in currentMapStack");
+            ROS_WARN("Debug visualization: No such topic in currentMapStack");
         }
         // Publish the maps
         std::vector<std::string> foo;
