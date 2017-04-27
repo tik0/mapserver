@@ -345,7 +345,7 @@ void mapRefreshAndStorage(const std::shared_ptr<std::map<std::string, mrpt::maps
 //                     "\n-ydiff_m / resolution_meterPerTile: " << ydiff_m / resolution_meterPerTile <<
 //                     "\n-ydiff_m / resolution_meterPerTile: " << ydiff_m / resolution_meterPerTile);
 
-    ROS_ERROR("Shift of the map (res: %0.2f m/tile): x=%d tiles s.t. %f m , y=%d tiles s.t. %f m", resolution_meterPerTile, xshift_tiles, -xdiff_m, yshift_tiles, -ydiff_m);
+    ROS_INFO("Shift of the map (res: %0.2f m/tile): x=%d tiles s.t. %f m , y=%d tiles s.t. %f m", resolution_meterPerTile, xshift_tiles, -xdiff_m, yshift_tiles, -ydiff_m);
 
     auto itDst = mapStackShiftedResult->begin();
     for (auto itSrc=mapStack->begin(); itSrc!=mapStack->end(); ++itSrc, ++itDst) {
@@ -1031,7 +1031,7 @@ void doIsmFusion(const nav_msgs::OccupancyGrid::ConstPtr &msg, const std::string
       ROS_ERROR("OGM has no size");
       return;
   } else {
-      ROS_ERROR("OK: Do the sensor fusion");
+      ROS_DEBUG("OK: Do the sensor fusion");
   }
 
   if (debug) {
@@ -1842,7 +1842,7 @@ int main(int argc, char **argv){
                   cv::waitKey(1); // Update the window
               }
         } catch (...) {
-            ROS_WARN("Debug visualization: No such topic in currentMapStack");
+            ROS_WARN("Debug visualization: No such topic '%s' in currentMapStack", debugTopic.c_str());
         }
         // Publish the maps
         std::vector<std::string> foo;
