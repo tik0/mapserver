@@ -431,7 +431,7 @@ std::shared_ptr<tf::Stamped<tf::Pose>> getPoseInFrame(const tf::Stamped<tf::Pose
           }
           tfListener.transformPose(dstFrame, poseInSourceFrame, poseInTargetFrame);
       } else {
-          throw(errorMsg);
+          throw std::runtime_error(errorMsg);
       }
     } catch(const std::exception &exc) {
       const std::string excStr(exc.what());
