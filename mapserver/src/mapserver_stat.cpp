@@ -970,6 +970,14 @@ nav_msgs::OccupancyGrid::Ptr oggTf(const std::string &targetFrame, const nav_msg
 
 }
 
+//void setMask () {
+//
+//}
+//
+//bool cellNotInMask(int idx, int idy) {
+//
+//}
+
 // Get topic name with callback: http://answers.ros.org/question/68434/get-topic-name-in-callback/?answer=68545#post-id-68545
 // Using bind function: http://en.cppreference.com/w/cpp/utility/functional/bind
 static std::shared_ptr<std::map<std::string, mrpt::maps::COccupancyGridMap2D*>> currentMapStack;
@@ -1092,7 +1100,7 @@ void doIsmFusion(const nav_msgs::OccupancyGrid::ConstPtr &msg, const std::string
 //      if (idx > 20) {
 //        if(debug)INFO_MSG("Before: " << mapStack[mapIdx].getCell(idx,idy))
 //        INFO_MSG("Before: " << map->getCell(idx,idy));
-        map->updateCell(idx,idy,float(ogmTransformed->data.at(idxIsm)) / 100.0f);
+      map->updateCell(idx,idy,float(ogmTransformed->data.at(idxIsm)) / 100.0f);
 //        map->updateCell(idx,idy,60.0f / 100.0f);
 //        INFO_MSG("After: " << map->getCell(idx,idy));
 //        if(debug)INFO_MSG("After: " << mapStack[mapIdx].getCell(idx,idy))
@@ -1413,9 +1421,9 @@ void tfTileNameHandler(const std_msgs::String nameMsg) {
 /// \brief Store the current tf tile name and swap the storage
 /// \param msg tuple of position, NavSat, and name name of the current tile tf
 ///
-static mapserver_msgs::pnsTuple lastPnsTuple;
 void tupleHandler(const mapserver_msgs::pnsTuple msg) {
   bool currentTileTfNameChange = false;
+  static mapserver_msgs::pnsTuple lastPnsTuple;
   mapRefresh.lock();
   if ((msg.string.data.back() != currentTileTfName.back())) {
       if (currentTileTfName.empty()) {
@@ -1433,7 +1441,7 @@ void tupleHandler(const mapserver_msgs::pnsTuple msg) {
   if (currentTileTfNameChange) {
     ROS_INFO("NEW MAP");
     tf::StampedTransform transformRoiInWorld;
-    transformRoiInWorld.setOrigin(tf::Vector3(lastPnsTuple.point.x, lastPnsTuple.point.y, lastPnsTuple.point.z));
+    transformRoiInWorld.setOrigin(tf::Vector3(msg.point.x, msg.point.y, msg.point.z));
     transformRoiInWorld.setRotation(tf::Quaternion(0,0,0,1));
 
     // Wait until all references are gone
@@ -1450,9 +1458,9 @@ void tupleHandler(const mapserver_msgs::pnsTuple msg) {
 
     std::stringstream navSatSs;
     navSatSs << std::setprecision(12)
-        << "lat_" << msg.navsat.latitude << "_"
-        << "lon_" << msg.navsat.longitude << "_"
-        << "alt_" << msg.navsat.altitude;
+        << "lat_" << lastPnsTuple.navsat.latitude << "_"
+        << "lon_" << lastPnsTuple.navsat.longitude << "_"
+        << "alt_" << lastPnsTuple.navsat.altitude;
 
      mapRefreshAndStorage( lastMapStack,                          // Map to shift/store/reset
                            currentMapStack,                       // The result of the shifted map

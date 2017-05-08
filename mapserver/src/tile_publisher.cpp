@@ -65,25 +65,28 @@ void messageHandler(const nav_msgs::Odometry odomMsg, const sensor_msgs::NavSatF
       ROS_WARN_ONCE("%s != %s, this might be OK if the two frames coincide",
                     tileParentTf.c_str(), odomMsg.header.frame_id.c_str());
   }
-  const double diffX = fabs(odomMsg.pose.pose.position.x - std::get<tupleEnum::pos>(tileCenterHistory.back()).x);
-  const double diffY = fabs(odomMsg.pose.pose.position.y - std::get<tupleEnum::pos>(tileCenterHistory.back()).y);
-  const double diffZ = fabs(odomMsg.pose.pose.position.z - std::get<tupleEnum::pos>(tileCenterHistory.back()).z);
 
-  ROS_DEBUG("Odom pose x:%f, y:%f, z:%f\n"
-            "Tile pose x:%f, y:%f, z:%f\n"
-            "Diff      x:%f, y:%f, z:%f",
-      odomMsg.pose.pose.position.x, odomMsg.pose.pose.position.y, odomMsg.pose.pose.position.z,
-      std::get<tupleEnum::pos>(tileCenterHistory.back()).x, std::get<tupleEnum::pos>(tileCenterHistory.back()).y, std::get<tupleEnum::pos>(tileCenterHistory.back()).z,
-      diffX, diffY, diffZ);
+  if (!tileCenterHistory.empty()) { // If we don't have to bootstrap, check for shifting
+    const double diffX = fabs(odomMsg.pose.pose.position.x - std::get<tupleEnum::pos>(tileCenterHistory.back()).x);
+    const double diffY = fabs(odomMsg.pose.pose.position.y - std::get<tupleEnum::pos>(tileCenterHistory.back()).y);
+    const double diffZ = fabs(odomMsg.pose.pose.position.z - std::get<tupleEnum::pos>(tileCenterHistory.back()).z);
 
-  if ( diffX > (boundingBoxWidth / 2.0) ) {
-      // Do map reset
-  } else if ( diffY > (boundingBoxHeight / 2.0) ) {
-      // Do map reset
-  } else if ( !zFix && (diffZ > (boundingBoxAltitude / 2.0)) ) {
-      // Do map reset
-  } else {
-      return;
+    ROS_DEBUG("Odom pose x:%f, y:%f, z:%f\n"
+              "Tile pose x:%f, y:%f, z:%f\n"
+              "Diff      x:%f, y:%f, z:%f",
+        odomMsg.pose.pose.position.x, odomMsg.pose.pose.position.y, odomMsg.pose.pose.position.z,
+        std::get<tupleEnum::pos>(tileCenterHistory.back()).x, std::get<tupleEnum::pos>(tileCenterHistory.back()).y, std::get<tupleEnum::pos>(tileCenterHistory.back()).z,
+        diffX, diffY, diffZ);
+
+    if ( diffX > (boundingBoxWidth / 2.0) ) {
+        // Do map reset
+    } else if ( diffY > (boundingBoxHeight / 2.0) ) {
+        // Do map reset
+    } else if ( !zFix && (diffZ > (boundingBoxAltitude / 2.0)) ) {
+        // Do map reset
+    } else {
+        return;
+    }
   }
 
   // Reset the map
@@ -146,7 +149,7 @@ pnsTuple sendTfHistory(void) {
 
   }
 
-  return *(currentTileCenterHistory.end()-1);
+  return currentTileCenterHistory.back();
 }
 
 int main(int argc, char **argv)
@@ -184,11 +187,11 @@ int main(int argc, char **argv)
   }
 
   // Init the history
-  tileCenterHistory.push_back(
-      pnsTuple(
-          geometry_msgs::Point(),
-          sensor_msgs::NavSatFix(),
-          tileOriginTfPrefix + std::string("0")));
+//  tileCenterHistory.push_back(
+//      pnsTuple(
+//          geometry_msgs::Point(),
+//          sensor_msgs::NavSatFix(),
+//          tileOriginTfPrefix + std::string("0")));
 
   // Init tf, publisher, subscriber
   brTf = new tf::TransformBroadcaster;
@@ -210,29 +213,39 @@ int main(int argc, char **argv)
   spinner.start();
   // Do Stuff once a second
   ros::Rate rate(tfPublishRate);
-  pnsTuple pns = sendTfHistory();
+  pnsTuple pns;
   std_msgs::String currentTfTileName;
   mapserver_msgs::pnsTuple currentTuple;
+  bool bootstrap = true;
   while(ros::ok()) {
 
-      // Send the tfs and only refresh the tuple when the delay is over
-      if ((++tfNamePublishDelayCounter / tfPublishRate) >= tfNamePublishDelay) {
-          pns = sendTfHistory();
+      if (bootstrap && !tileCenterHistory.empty()) {
+        // Send the first received location message as tuple
+        pns = sendTfHistory();
+        bootstrap = false;
+      } else if (!bootstrap) {
+        // Send the tfs and only refresh the tuple when the delay is over
+        if ((++tfNamePublishDelayCounter / tfPublishRate) >= tfNamePublishDelay) {
+            pns = sendTfHistory();
+        } else {
+            sendTfHistory();
+        }
+
+        // Tell the world which frame to use
+        currentTfTileName.data = std::get<tupleEnum::name>(pns);
+        currentTileTfNamePublisher.publish(currentTfTileName);
+        if (!topicNavsat.empty()) {
+          currentTuple.header.frame_id = tileParentTf;
+          currentTuple.header.stamp = ros::Time::now();
+          currentTuple.string.data = std::get<tupleEnum::name>(pns);
+          currentTuple.point = std::get<tupleEnum::pos>(pns);
+          currentTuple.navsat = std::get<tupleEnum::nav>(pns);
+          currentTuplePublisher.publish(currentTuple);
+        }
       } else {
-          sendTfHistory();
+        ROS_DEBUG("Bootstrapping: Waiting for first location message");
       }
 
-      // Tell the world which frame to use
-      currentTfTileName.data = std::get<tupleEnum::name>(pns);
-      currentTileTfNamePublisher.publish(currentTfTileName);
-      if (!topicNavsat.empty()) {
-        currentTuple.header.frame_id = tileParentTf;
-        currentTuple.header.stamp = ros::Time::now();
-        currentTuple.string.data = std::get<tupleEnum::name>(pns);
-        currentTuple.point = std::get<tupleEnum::pos>(pns);
-        currentTuple.navsat = std::get<tupleEnum::nav>(pns);
-        currentTuplePublisher.publish(currentTuple);
-      }
     rate.sleep();
   }
 

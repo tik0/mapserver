@@ -53,11 +53,14 @@
     <param name="min_y_m" value="$(eval -arg('roi_height') / 2)" />
   </node>-->
   
+<?undefined
+  <!--launch-prefix="gdb -ex run --args"-->
+?>
   <node pkg="mapserver" name="mapserver_stat" type="mapserver_stat" respawn="true" output="screen">
     <param name="tile_origin_tf_prefix" type="string" value="map_base_link_" />
     <param name="tile_origin_tf_sufix_for_roi_origin" type="string" value="_ROI_ORIGIN" />
     <param name="current_tf_name_topic" type="string" value="/currentTfTile" />
-<!--     <param name="current_tuple_topic" type="string" value="/currentTuple" /> -->
+    <param name="current_tuple_topic" type="string" value="/currentTuple" />
     <param name="world_link" type="string" value="odom" />
     <param name="resolution" value="0.02" />
     <param name="maxOccupancyUpdateCertainty" value="255" />
