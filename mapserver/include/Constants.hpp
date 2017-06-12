@@ -93,12 +93,6 @@ namespace mapping {
     /** \brief Maximum vertical coordinate (y) */
     const double yMax = height - originHeight; // meter
     
-    /** \brief Minimum vertical coordinate (y) */
-    const double zMin = originAltitude - altitude; // meter
-
-    /** \brief Maximum vertical coordinate (y) */
-    const double zMax = altitude - originHeight; // meter
-
     namespace discrete {
       /** \brief Map width */
       const size_t width = roi::width / discreteResolution; // cells

@@ -77,7 +77,7 @@
     <param name="min_x_m" value="$(eval -arg('roi_width') / 2)" />
     <param name="min_y_m" value="$(eval -arg('roi_height') / 2)" />
     <param name="rate" value="10" />
-    <param name="map_storage_location" value="/tmp/" />
+    <param name="map_storage_location" value="/opt/tmp/" />
   </node>
 
  </launch>

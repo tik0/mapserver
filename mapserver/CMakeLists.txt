@@ -229,6 +229,14 @@ include_directories(
 
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
+
+add_library(mapserver src/mapserver.cpp)
+target_link_libraries(mapserver
+  ${catkin_LIBRARIES}
+  ${OpenCV_LIBRARIES}
+  ${Boost_LIBRARIES}
+)
+
 add_executable(mapserver_raw src/mapserver_raw.cpp)
 target_link_libraries(mapserver_raw
   ${catkin_LIBRARIES}

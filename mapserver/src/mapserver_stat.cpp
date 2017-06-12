@@ -46,8 +46,8 @@ std::mutex mtxSwap, mtxShowRpc, mtxShowIsm;
 #include <ros/duration.h>
 
 ros::Publisher publisherMap, publisherIsmAsPointCloud, publisherIsmAsOgm;
-ros::Subscriber subscriberIsm, subscriberTfTileName, subscriberStoreMaps, subscriberTuple;
-tf::TransformListener *listenerTf;
+ros::Subscriber subscriberIsm;
+
 
 // OpenCV
 #include <opencv2/opencv.hpp>
@@ -83,7 +83,7 @@ static std::string mapScopes[mappingLayers::NUM_MAPS];
 // Program options
   // Properties of a single occupancy grid map
   static std::string currentTileTfName(""), lastTileTfName("");
-  static std::string topicMap, topicLaser, tileOriginTfPrefix, tileOriginTfSufixForRoiOrigin, currentTfNameTopic, currentTupleTopic, worldLink, storeMapsTopic, reqTopicMapStack, debugIsmTopic;
+  static std::string tileOriginTfPrefix, tileOriginTfSufixForRoiOrigin, currentTfNameTopic, currentTupleTopic, worldLink, storeMapsTopic, reqTopicMapStack, debugIsmTopic;
   static double idleStartupTime_s;
   static double resolution = mapping::discreteResolution;
   static float maxOccupancyUpdateCertainty = mapping::ogm::maxOccupancyUpdateCertainty;
@@ -624,86 +624,6 @@ std::shared_ptr<std::vector<tf::Point>> getOgmCornerPoints(const nav_msgs::Occup
   return points;
 }
 
-cv::Point2f getFarthestPoints(std::vector<cv::Point2f> &points) {
-  float abs = 0.0;
-  std::size_t idx = 0, id=0;
-  for (auto it = points.begin(); it != points.end(); ++it, ++idx) {
-      const float absTmp = it->x * it->x + it->y * it->y;
-      if ( abs < absTmp) {
-          abs = absTmp;
-          id = idx;
-      }
-  }
-  return points.at(id);
-}
-
-cv::Point2f getNearestPoints(std::vector<cv::Point2f> &points) {
-  float abs = FLT_MAX;
-  std::size_t idx = 0, id=0;
-  for (auto it = points.begin(); it != points.end(); ++it, ++idx) {
-      const float absTmp = it->x * it->x + it->y * it->y;
-      if ( abs > absTmp) {
-          abs = absTmp;
-          id = idx;
-      }
-  }
-  return points.at(id);
-}
-
-cv::Point2f getXYMax(std::vector<cv::Point2f> &points) {
-  float xMax = 0.0;
-  float yMax = 0.0;
-  for (auto it = points.begin(); it != points.end(); ++it) {
-      if ( it->y > yMax) {
-          yMax = it->y;
-      }
-      if ( it->x > xMax) {
-          xMax = it->x;
-      }
-  }
-  return cv::Point2f(xMax, yMax);
-}
-
-cv::Point2f getXYMin(std::vector<cv::Point2f> &points) {
-  float xMax = FLT_MAX;
-  float yMax = FLT_MAX;
-  for (auto it = points.begin(); it != points.end(); ++it) {
-      if ( it->y < yMax) {
-          yMax = it->y;
-      }
-      if ( it->x < xMax) {
-          xMax = it->x;
-      }
-  }
-  return cv::Point2f(xMax, yMax);
-}
-
-
-///
-/// \brief Compares to values with a given slack. The slack is the absolute value, the two numbers may differ
-/// \param a First value
-/// \param b Second value
-/// \param slack The maximum allowed value, the two numbers may differ
-/// \return True if values are equal
-///
-template<typename T>
-bool compare(T a, T b, T slack = T(0.0)) {
-  T diff;
-  // Sanity check
-  if (slack < T(0.0)) {
-      slack = -slack;
-  }
-  if (a > b) {
-      diff = a - b;
-  } else {
-      diff = b - a;
-  }
-  if (diff <= slack) {
-      return true;
-  } else {
-      return false;
-  }
-}
 
 ///
 /// \brief Resize a OGM to the desired resolution
@@ -762,7 +682,7 @@ nav_msgs::OccupancyGrid::ConstPtr ogmTf(const nav_msgs::OccupancyGrid::ConstPtr 
 
   // First check, if pose and resolution are the same, to minimize workload
   if (ogmOriginPose == targetOrigin) {
-      const bool resolutionIsSame = compare(targetResolution, ogm->info.resolution, min(ogm->info.resolution, targetResolution) / 2 );
+      const bool resolutionIsSame = utils::compare(targetResolution, ogm->info.resolution, min(ogm->info.resolution, targetResolution) / 2 );
       if (!resolutionIsSame) { // Scale the OGM
           ROS_DEBUG("Pose is the same: Just change the resolution of the OGM");
           return ogmResize(ogm, targetResolution);
@@ -1122,67 +1042,6 @@ void doIsmFusion(const nav_msgs::OccupancyGrid::ConstPtr &msg, const std::string
   }
 }
 
-//// RSB Server function for the mapping server which replies with a compressed image map of the environment
-//// TODO Add view.proto
-//class mapServerCompressedMapImage: public rsb::patterns::LocalServer::Callback<void, cv::Mat> {
-//public:
-//  boost::shared_ptr<cv::Mat> call(const std::string& /*methodName*/) {
-//    INFO_MSG("Color map request received.");
-//    return doColorMapCallback();
-//  }
-//};
-
-
-//// Unpack the requested layer to a single OGM and return it
-//boost::shared_ptr<rst::navigation::OccupancyGrid2DInt> doOgmSingleLayerCallback(std::string requestedLayerName) {
-//  boost::shared_ptr<rst::navigation::OccupancyGrid2DInt> requestedLayer(new rst::navigation::OccupancyGrid2DInt);
-//
-//  // Get the layer name
-//  int requestedLayerIdx = -1;
-//  for (uint layerIdx = 0; layerIdx < NUM_MAPS; ++layerIdx) {
-//    if (requestedLayerName.compare(mapRequestScopes[layerIdx]) == 0) {
-//      requestedLayerIdx = layerIdx;
-//      break;
-//    }
-//  }
-//  if (requestedLayerIdx < 0) {
-//    throw invalid_argument("Requested layer" + requestedLayerName + "does not exist");
-//  }
-//
-//  DEBUG_MSG("Request layer number: " << requestedLayerIdx)
-//
-//  // Copy the map layer
-//  // TODO Is the order of idy and idx correct? (Check also the compressedColorRequest!)
-//  requestedLayer->set_height(mapSizeY);
-//  requestedLayer->set_width(mapSizeX);
-//  requestedLayer->set_resolution(mapping::discreteResolution);
-//  requestedLayer->mutable_map()->resize(mapSizeY * mapSizeX, -1);
-//  for (int idy = 0; idy < mapSizeY; ++idy) {
-//    for (int idx = 0; idx < mapSizeX; ++idx) {
-//      // We get values from 0.0 .. 1.0 and have to map it to 0 .. 100;
-////      INFO_MSG("idx " << idx << " / " << mapSizeX)
-////      INFO_MSG("idy " << idy << " / " << mapSizeY)
-//      requestedLayer->mutable_map()->at(idy * mapSizeX + idx) =
-//          char(mapStack[requestedLayerIdx].getCell(idx, idy) * 100.0);
-//    }
-//  }
-//
-//  // Set the pose of the map
-//  // TODO For now it is the ROI Origin, but it will become something different, when we
-//  // TODO introduce view.proto
-//  rst::geometry::Pose *layerPose = requestedLayer->mutable_origin();
-//  layerPose->mutable_rotation()->set_qx(0.0);
-//  layerPose->mutable_rotation()->set_qy(0.0);
-//  layerPose->mutable_rotation()->set_qz(0.0);
-//  layerPose->mutable_rotation()->set_qw(1.0);
-//  layerPose->mutable_translation()->set_x(-mapping::roi::originWidth);
-//  layerPose->mutable_translation()->set_y(-mapping::roi::originHeight);
-//  layerPose->mutable_translation()->set_z(0.0);
-//
-//  return requestedLayer;
-//}
-
-
 nav_msgs::OccupancyGrid getIsmOutput(const mapserver_msgs::mapPrimitive &view, const mrpt::maps::COccupancyGridMap2D &input) {
 
   cv::Mat statisticMat , croppedMat; /*float matrices*/
@@ -1229,260 +1088,7 @@ nav_msgs::OccupancyGrid getIsmOutput(const mapserver_msgs::mapPrimitive &view, c
   return output;
 }
 
-//class mapServerStockEdge: public rsb::patterns::LocalServer::Callback<rst::ms::mapPrimitive, rst::navigation::OccupancyGrid2DInt> {
-//  boost::shared_ptr<rst::navigation::OccupancyGrid2DInt> call(const std::string& /*methodName*/,
-//              boost::shared_ptr<rst::ms::mapPrimitive> input) {
-//        INFO_MSG( "mapServer-stockEdge method called" );
-//        const boost::shared_ptr<rst::navigation::OccupancyGrid2DInt> output(getIsmOutput(input, mapStack.at(ms::constants::mappingLayers::maps::stockEdge)));
-//        INFO_MSG( "mapServer-stockEdge method called: Finish" );
-//        return output;
-//    }
-//};
 
-
-// RSB Server function for the mapping server which replies with a OGM map of the environment
-// TODO Add view.proto
-//class mapServerSingleLayerOgm: public rsb::patterns::LocalServer::Callback<std::string, rst::navigation::OccupancyGrid2DInt> {
-//public:
-//  boost::shared_ptr<rst::navigation::OccupancyGrid2DInt> call(const std::string& /*methodName*/,
-//                                                              boost::shared_ptr<std::string> requestedLayerName) {
-//    INFO_MSG("OGM single layer request received.");
-//    return doOgmSingleLayerCallback(*requestedLayerName);
-//  }
-//};
-
-///
-/// \brief Add subscriber to newly emerged topic with super-topic
-/// \param T [template] The message type
-/// \param subList Subscriber list which will be expanded by subscriber if new topics emerge
-/// \param f Function name with declaration "void myFun(const myRosMsgType::ConstPtr &msg, const std::string &topic)"
-/// \param superTopic Prefix of the topic in the form of "/my/super/topic/"
-/// \param debug Print additional information
-/// \param n The node handle
-///
-template<typename T>
-void advertiseSubscribers(
-    std::vector<ros::Subscriber> &subList,
-    void (&f)(const boost::shared_ptr< T const>&, const std::string&),
-    const std::string &superTopic,
-    const int &debug,
-    ros::NodeHandle &n = ros::NodeHandle("~")) {
-
-  ros::master::V_TopicInfo topics; // List of topics
-  bool someSubscription = false;   // Indicator, if subscription occurs
-  bool subscribe = true;           // Indicator, if subscription should take place
-
-  if (ros::master::getTopics(topics)) {
-    if (debug) { // Print topics
-      ROS_DEBUG("List topics:\n");
-      for (int idx = 0; idx < topics.size(); ++idx) {
-        ROS_DEBUG("\n%d:\n"
-                 "  TOPIC: %s\n"
-                 "  TYPE : %s\n",
-                 idx, topics.at(idx).name.c_str(), topics.at(idx).datatype.c_str());
-      }
-    }
-    // Get a list topics which needs to be investigated (Check with ism_scope_prefix)
-    std::vector<bool> topicsForSubscription(topics.size(), false);
-    if ((superTopic.size() == 1) || superTopic.empty()) { // Check if "/" is the only content
-        ROS_WARN("Using all scopes, because ism_scope_prefix is empty");
-        topicsForSubscription = std::vector<bool>(topics.size(), true);
-    } else { // Set the indicator to true, if the super-topic is the same
-        for (int idx = 0; idx < topics.size(); ++idx) {
-            if (!topics.at(idx).name.substr(0, superTopic.size()).compare(superTopic)) {
-                topicsForSubscription.at(idx) = true;
-            }
-        }
-    }
-    // Check if the topics are already subscribed, otherwise add a subscription
-    for (int idx = 0; idx < topics.size(); ++idx) {
-        if (!topicsForSubscription.at(idx)) { // Skip if the topic is not valid
-            continue;
-        } else {
-            someSubscription = true;
-            if(subList.empty()) { // If we haven't subscribed to anything yet, get the first
-                ROS_INFO("First subscription to: %s", topics.at(idx).name.c_str());
-                subList.push_back(
-                    n.subscribe<T>(topics.at(idx).name, 100, std::bind(f, std::placeholders::_1, topics.at(idx).name)));
-            } else {
-                subscribe = true;
-                for (int idy = 0; idy < subList.size(); ++idy) { // Check if topic already subscribed, ...
-                    if (!subList.at(idy).getTopic().compare(topics.at(idx).name)) {
-                      subscribe = false;
-                      break;
-                    }
-                }
-                if (subscribe) { // ... otherwise do the subscription
-                    ROS_INFO("Subscription %d to: %s", int(subList.size()+1), topics.at(idx).name.c_str());
-                    subList.push_back(
-                            n.subscribe<T>(topics.at(idx).name, 100, std::bind(f, std::placeholders::_1, topics.at(idx).name)));
-                }
-            }
-        }
-    }
-    if (!someSubscription) {
-        ROS_DEBUG("Nothing to subscribe");
-    } else {
-        ROS_DEBUG("Valid topics available");
-    }
-  } else {
-    ROS_ERROR("No topics listable");
-  }
-}
-
-void storeMaps (const std_msgs::String nameMsg) {
-
-  if (nameMsg.data.empty()) {
-      ROS_INFO("storeMaps: Store all maps");
-  } else {
-      // TODO Store maps defined in nameMsg
-  }
-
-  mapRefresh.lock();
-  std::string tileTfName = currentTileTfName;
-  auto mapStack = currentMapStack;
-  mapRefresh.unlock();
-
-  if (currentTileTfName.empty()) {
-      ROS_WARN("storeMaps: No current frame name available. Skipping storage");
-      return;
-  }
-
-  mapStorage( currentMapStack,
-              std::string("OGM"),
-              std::string(""),
-              std::string("logodds"),
-              def.resolution);
-}
-
-
-///
-/// \brief Store the current tf tile name and swap the storage
-/// \param nameMsg Name of the current tile tf
-///
-void tfTileNameHandler(const std_msgs::String nameMsg) {
-  bool currentTileTfNameChange = false;
-  mapRefresh.lock();
-  if ((nameMsg.data.back() != currentTileTfName.back())) {
-      if (currentTileTfName.empty()) {
-          // First round, we bootstrap
-          currentTileTfName = nameMsg.data;
-      } else {
-        std::swap(currentMapStack, lastMapStack);
-        lastTileTfName    = currentTileTfName;
-        currentTileTfName = nameMsg.data;
-        currentTileTfNameChange = true;
-      }
-  }
-
-  if (currentTileTfNameChange) {
-    tf::StampedTransform transformRoiInWorld;
-    try {
-      listenerTf->waitForTransform(worldLink, lastTileTfName, ros::Time(0.0), ros::Duration(3.0));
-      listenerTf->lookupTransform(worldLink, lastTileTfName, ros::Time(0.0), transformRoiInWorld);
-    } catch(const std::exception &exc) {
-      const std::string excStr(exc.what());
-      ROS_ERROR("tfTileNameHandler: %s", excStr.c_str());
-      mapRefresh.unlock();
-      return;
-    }
-    ROS_INFO("NEW MAP");
-
-    // Wait until all references are gone
-    std::size_t lockCnt = 0;
-    const std::size_t lockCntMax = 200000; // 2 seconds if we sleep for 10 us
-    while(!(lastMapStack.unique() && currentMapStack.unique())) {
-        usleep(10);
-        if (++lockCnt > lockCntMax) {
-            ROS_ERROR("tfTileNameHandler: Locked for to long, skip storage (maybe deadlock or out if resources?)");
-            mapRefresh.unlock();
-            return;
-        }
-    }
-
-    mapRefreshAndStorage( lastMapStack,                          // Map to shift/store/reset
-                          currentMapStack,                       // The result of the shifted map
-                          transformRoiInWorld,                   // Transform
-                          std::string("OGM"),                    // Kind of map
-                          std::string(""),                       // Format (empty: Take from type specifier)
-                          std::string("logodds"),                // Unit
-                          def.resolution,                        // Resolution per tile
-                          !dontStoreMaps,                        // Info if maps should be stored
-                          bool(shiftMap),                        // Info if maps should be shifted
-                          !shiftMap,                             // If map is not shifted, reset the content of mapStack
-                          mrpt::maps::COccupancyGridMap2D::p2l(0.5)); // Fill-up value (logodds(0.5f) = unknown)
-  }
-
-  mapRefresh.unlock();
-
-}
-
-///
-/// \brief Store the current tf tile name and swap the storage
-/// \param msg tuple of position, NavSat, and name name of the current tile tf
-///
-void tupleHandler(const mapserver_msgs::pnsTuple msg) {
-  bool currentTileTfNameChange = false;
-  static mapserver_msgs::pnsTuple lastPnsTuple;
-  mapRefresh.lock();
-  if ((msg.string.data.back() != currentTileTfName.back())) {
-      if (currentTileTfName.empty()) {
-          // First round, we bootstrap
-          currentTileTfName = msg.string.data;
-          lastPnsTuple = msg;
-      } else {
-        std::swap(currentMapStack, lastMapStack);
-        lastTileTfName    = currentTileTfName;
-        currentTileTfName = msg.string.data;
-        currentTileTfNameChange = true;
-      }
-  }
-
-  if (currentTileTfNameChange) {
-    ROS_INFO("NEW MAP");
-    tf::StampedTransform transformRoiInWorld;
-    transformRoiInWorld.setOrigin(tf::Vector3(msg.point.x, msg.point.y, msg.point.z));
-    transformRoiInWorld.setRotation(tf::Quaternion(0,0,0,1));
-
-    // Wait until all references are gone
-    std::size_t lockCnt = 0;
-    const std::size_t lockCntMax = 200000; // 2 seconds if we sleep for 10 us
-    while(!(lastMapStack.unique() && currentMapStack.unique())) {
-        usleep(10);
-        if (++lockCnt > lockCntMax) {
-            ROS_ERROR("tfTileNameHandler: Locked for to long, skip storage (maybe deadlock or out if resources?)");
-            mapRefresh.unlock();
-            return;
-        }
-    }
-
-    std::stringstream navSatSs;
-    navSatSs << std::setprecision(12)
-        << "lat_" << lastPnsTuple.navsat.latitude << "_"
-        << "lon_" << lastPnsTuple.navsat.longitude << "_"
-        << "alt_" << lastPnsTuple.navsat.altitude;
-
-     mapRefreshAndStorage( lastMapStack,                          // Map to shift/store/reset
-                           currentMapStack,                       // The result of the shifted map
-                           transformRoiInWorld,                   // Transform
-                           std::string("OGM"),                    // Kind of map
-                           std::string(""),                       // Format (empty: Take from type specifier)
-                           std::string("logodds"),                // Unit
-                           def.resolution,                        // Resolution per tile
-                           !dontStoreMaps,                        // Info if maps should be stored
-                           bool(shiftMap),                        // Info if maps should be shifted
-                           !shiftMap,                             // If map is not shifted, reset the content of mapStack
-                           mrpt::maps::COccupancyGridMap2D::p2l(0.5), // Fill-up value (logodds(0.5f) = unknown)
-                           true,
-                           navSatSs.str());
-    // Store the current tile information as next last one
-    lastPnsTuple = msg;
-  }
-
-  mapRefresh.unlock();
-
-
-}
 
 #include <nav_msgs/GridCells.h>
 #include <sensor_msgs/PointCloud2.h>
@@ -1806,15 +1412,7 @@ int main(int argc, char **argv){
 //  fillMapStack(mapStackStorageTemp, mapInitValue);
 //  fillMapStack(mapStackShiftTemp, mapInitValue);
 
-  // Prepare subscriber for all future OGM
-  listenerTf = new tf::TransformListener;
-  std::vector<ros::Subscriber> subIsmList; // List of subscribers TODO Replace by std::map?
-  if (currentTupleTopic.empty()) {
-      subscriberTfTileName = n.subscribe<std_msgs::String>(currentTfNameTopic, 2, tfTileNameHandler);
-  } else {
-      subscriberTuple = n.subscribe<mapserver_msgs::pnsTuple>(currentTupleTopic, 2, tupleHandler);
-  }
-  subscriberStoreMaps = n.subscribe<std_msgs::String>(storeMapsTopic, 1, storeMaps);
+
 
 
 

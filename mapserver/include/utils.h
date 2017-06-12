@@ -77,6 +77,32 @@ enum esitmatorId{
   isWeedId = 3,
 };
 
+///
+/// \brief Compares to values with a given slack. The slack is the absolute value, the two numbers may differ
+/// \param a First value
+/// \param b Second value
+/// \param slack The maximum allowed value, the two numbers may differ
+/// \return True if values are equal
+///
+template<typename T>
+bool compare(T a, T b, T slack = T(0.0)) {
+  T diff;
+  // Sanity check
+  if (slack < T(0.0)) {
+      slack = -slack;
+  }
+  if (a > b) {
+      diff = a - b;
+  } else {
+      diff = b - a;
+  }
+  if (diff <= slack) {
+      return true;
+  } else {
+      return false;
+  }
+}
+
 template<typename T>
 inline T odds(T P) {
   return P / (1-P);
@@ -570,6 +596,60 @@ cv::RotatedRect cutView(const cv::Mat &src, cv::Mat &dst, const double srcResolu
   return rectView;
 }
 
+
+cv::Point2f getFarthestPoints(std::vector<cv::Point2f> &points) {
+  float abs = 0.0;
+  std::size_t idx = 0, id=0;
+  for (auto it = points.begin(); it != points.end(); ++it, ++idx) {
+      const float absTmp = it->x * it->x + it->y * it->y;
+      if ( abs < absTmp) {
+          abs = absTmp;
+          id = idx;
+      }
+  }
+  return points.at(id);
+}
+
+cv::Point2f getNearestPoints(std::vector<cv::Point2f> &points) {
+  float abs = FLT_MAX;
+  std::size_t idx = 0, id=0;
+  for (auto it = points.begin(); it != points.end(); ++it, ++idx) {
+      const float absTmp = it->x * it->x + it->y * it->y;
+      if ( abs > absTmp) {
+          abs = absTmp;
+          id = idx;
+      }
+  }
+  return points.at(id);
+}
+
+cv::Point2f getXYMax(std::vector<cv::Point2f> &points) {
+  float xMax = 0.0;
+  float yMax = 0.0;
+  for (auto it = points.begin(); it != points.end(); ++it) {
+      if ( it->y > yMax) {
+          yMax = it->y;
+      }
+      if ( it->x > xMax) {
+          xMax = it->x;
+      }
+  }
+  return cv::Point2f(xMax, yMax);
+}
+
+cv::Point2f getXYMin(std::vector<cv::Point2f> &points) {
+  float xMax = FLT_MAX;
+  float yMax = FLT_MAX;
+  for (auto it = points.begin(); it != points.end(); ++it) {
+      if ( it->y < yMax) {
+          yMax = it->y;
+      }
+      if ( it->x < xMax) {
+          xMax = it->x;
+      }
+  }
+  return cv::Point2f(xMax, yMax);
+}
 
 #endif // __OPENCV_ALL_HPP__ or OPENCV_ALL_HPP
 
