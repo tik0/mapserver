@@ -278,6 +278,7 @@ add_dependencies(tile_publisher mapserver_gencpp)
 add_dependencies(mapserver_raw mapserver_gencpp)
 add_dependencies(mapserver_raw_rpc_test mapserver_msgs_gencpp mapserver_gencpp)
 add_dependencies(mapserver_stat mapserver_msgs_gencpp mapserver_gencpp)
+add_dependencies(mapserver_stat_rpc_mapStack_test mapserver_msgs_gencpp mapserver_gencpp)
 
 add_definitions("-std=c++11")
 

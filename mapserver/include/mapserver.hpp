@@ -1,6 +1,18 @@
 
 #include "Constants.hpp"
 
+// Stdandard libraries
+#include <mutex>          // std::mutex
+#include <future>
+#include <math.h>
+#include <string>
+#include <iostream>
+#include <sstream>
+#include <algorithm>    // std::min
+#include <exception>
+#include <map>
+#include <memory>
+
 // ROS
 #include <ros/ros.h>
 #include <ros/spinner.h>
@@ -27,13 +39,13 @@
 #include <tf/transform_broadcaster.h>
 #include <ros/duration.h>
 
-template<typename TMapstack, typename TValue>
+template<typename TMapstack, typename TData, typename TValue, typename TChild>
 class Mapserver {
 
  public:
-  Mapserver(const ros::NodeHandle& nh);
+  Mapserver(ros::NodeHandle& nh);
 
-  void ~Mapserver();
+  ~Mapserver();
 
   ///
   /// \brief Add subscriber to newly emerged topic with super-topic
@@ -44,17 +56,16 @@ class Mapserver {
   /// \param debug Print additional information
   /// \param n The node handle
   ///
-  template<typename T>
-  static void advertiseSubscribers(
+  void advertiseSubscribers(
       std::vector<ros::Subscriber> &subList,
-      void (&f)(const boost::shared_ptr< T const>&, const std::string&),
+      void (TChild::*f)(const boost::shared_ptr< TData const>&, const std::string&),
+      TChild *obj,
       const std::string &superTopic,
-      const int &debug,
-      ros::NodeHandle &n = ros::NodeHandle("~"));
+      const int &debug);
 
  protected:
   //! The node handle
-  const ros::NodeHandle n;
+  ros::NodeHandle n;
   //! Holding the current tile name
   std::string currentTileTfName;
   //! Holding the former tile name
@@ -63,12 +74,16 @@ class Mapserver {
   int mapSizeX;
   //! Discrete map size in y direction (s.t. depth)
   int mapSizeY;
+  //! Discrete map size in z direction (s.t. height)
+  int mapSizeZ;
   //! Location to store the maps
   std::string mapStorageLocation;
   //! Indicator, if maps should be stored if currentTileTfName changes
   int dontStoreMaps = 0;
   //! Indicator, if maps should be shifted in the memory if currentTileTfName changes
   int shiftMap = 1;
+  //! The topic prefix used by advertiseSubscribers to subscribe to all child topics
+  std::string topicPrefix;
   //! The prefix of the frame id for the origin of the tile
   std::string tileOriginTfPrefix;
   //! The suffix of the frame id for the ROI origin of the tile
@@ -125,10 +140,12 @@ class Mapserver {
 
   //! Mutex to lock the mapstacks
   std::mutex mapRefresh;
+  //! Mutex for odometry messages
+  std::mutex mtxOdom;
   //! The current mapstack (Active mapstack in the double buffer)
-  std::shared_ptr<TMapstack> currentMapStack;
+  std::shared_ptr<std::map<std::string, TMapstack*>> currentMapStack;
   //! The last mapstack (Passive mapstack in the double buffer)
-  std::shared_ptr<TMapstack> lastMapStack;
+  std::shared_ptr<std::map<std::string, TMapstack*>> lastMapStack;
 
   //! TF listener
   tf::TransformListener *listenerTf;
@@ -142,6 +159,7 @@ class Mapserver {
   std::vector<ros::Subscriber> subIsmList;
 
  private:
+
   //! Derived from mapInitValue which is actually applied
   TValue mapInitValueApplied;
 
@@ -159,14 +177,34 @@ class Mapserver {
   void tupleHandler(const mapserver_msgs::pnsTuple msg);
 
   ///
+  /// \brief Simplified wrapper function for mapRefreshAndStorage()
+  ///
+  void mapStorage(const std::shared_ptr<std::map<std::string, mrpt::maps::COccupancyGridMap2D*>> &mapStack,
+                            const std::string prefixString,
+                            const std::string formatString,
+                            const std::string formatUnitString,
+                            const double resolution_meterPerTile);
+
+  ///
   /// \brief Store the current mapstack without shifting or swaping
   /// \param nameMsg Name of layer to store. Store all if string is empty
   ///
   void storeMaps (const std_msgs::String nameMsg);
 
+  ///
+  /// \brief Swaps all necessary stacks
+  ///
+  virtual void swapStack();
 
-  virtual void mapRefreshAndStorage(const std::shared_ptr<std::map<std::string, mrpt::maps::COccupancyGridMap2D*>> &mapStack,
-                            const std::shared_ptr<std::map<std::string, mrpt::maps::COccupancyGridMap2D*>> &mapStackShiftedResult,
+  ///
+  /// \brief Evaluates condition for storing refreshing and storing the mapstack
+  /// \return True if all mapstacks are ready to be stored and swapped
+  ///
+  virtual inline bool mapRefreshAndStorageCondition();
+
+
+  virtual void mapRefreshAndStorage(const std::shared_ptr<std::map<std::string, TMapstack*>> &mapStack,
+                            const std::shared_ptr<std::map<std::string, TMapstack*>> &mapStackShiftedResult,
                             const tf::StampedTransform transformRoiInWorld,
                             const std::string prefixString,
                             const std::string formatString,
@@ -179,16 +217,12 @@ class Mapserver {
                             bool storeCurrentPosition = true,
                             std::string additionalInformationString = std::string(""));
 
-  //  std::string debugIsmTopic;
   //  std::string topicMap;
   //  std::string topicLaser;
-//  std::string ismScopePrefix = scopes::map::super::ogm;
 //  // Marging for non present information: 0.45 .. 0.55 -> 0.1
-//  float uncertaintyBoundary = mapping::ogm::minDrawOccupancyUpdateCertainty;
-//  float mapInitValue = mapping::ogm::unknownOccupancyUpdateCertainty;
 
 //  //!
-//  float maxOccupancyUpdateCertainty = mapping::ogm::maxOccupancyUpdateCertainty;
+
 
 //  // Global variables
 //    // The map stack
@@ -198,18 +232,26 @@ class Mapserver {
 //    std::vector<mrpt::maps::COccupancyGridMap2D> mapStackShiftTemp; // Temp stack for shifting
 //    mrpt::maps::COccupancyGridMap2D::TMapDefinition def;
 
-//  std::string debugTopic;
-//  n.param<std::string>("debug_topic", debugTopic, "/amiro2/ism/cam"); // The topic of the fused map to show via opencv
-//  n.param<float>("uncertainty_boundary", uncertaintyBoundary, 0.5); // Uncertainty boundary for displaying a feature (standard: 0.5 (unknown))
-//  n.param<float>("max_occupancy_update_certainty", maxOccupancyUpdateCertainty);
-//  n.param<std::string>("ism_scope_prefix", ismScopePrefix, scopes::map::super::ogm); // Scope prefix for the inverse sensor models
 
-
-//  std::string topicDebugGridPrefix;
-//  n.param<std::string>("topic_debug_grid_prefix", topicDebugGridPrefix, "/viz");
  public:
 
+  ///
+  /// \brief // Sanity check for topic name, so it looks like "/some/scope" or at least "/"
+  /// \param topic The topic name to refine
+  ///
+  static void topicRefinement(std::string &topic);
 
+
+  void translateMap(cv::Mat &src, cv::Mat &dst, double offsetx = 0, double offsety = 0, TValue fillValue = msNumeric::invalidValue_int16);
+
+  // Set all map tiles of all maps to the given value
+  void fillMapStack(std::vector<TMapstack> &mapStack, float value = mapping::ogm::unknownOccupancyUpdateCertainty);
+
+  // Translate a map
+  void translateMap(TMapstack &map, int offsetx = 0, int offsety = 0, float fillProbability = mapping::ogm::unknownOccupancyUpdateCertainty);
+
+  // Translate a stack of maps
+  void translateMapStack(const std::shared_ptr<std::map<std::string, TMapstack*>> &mapStack, int offsetx = 0, int offsety = 0, float fillProbability = mapping::ogm::unknownOccupancyUpdateCertainty);
 
 
 
@@ -225,13 +267,14 @@ class Mapserver {
 /// \param debug Print additional information
 /// \param n The node handle
 ///
-template<typename T>
-static void Mapserver<void, void>::advertiseSubscribers(
+template<typename TMapstack, typename TData, typename TValue, typename TChild>
+void Mapserver<TMapstack, TData, TValue, TChild>::advertiseSubscribers(
     std::vector<ros::Subscriber> &subList,
-    void (&f)(const boost::shared_ptr< T const>&, const std::string&),
+    void (TChild::*f)(const boost::shared_ptr< TData const>&, const std::string&),
+    TChild *obj,
     const std::string &superTopic,
-    const int &debug,
-    ros::NodeHandle &n = ros::NodeHandle("~")) {
+    const int &debug) {
+//    ros::NodeHandle &n = ros::NodeHandle("~")) {
 
   if (superTopic.empty()) {
     ROS_ERROR_ONCE("No subscription to root topic");
@@ -273,7 +316,7 @@ static void Mapserver<void, void>::advertiseSubscribers(
             if(subList.empty()) { // If we haven't subscribed to anything yet, get the first
                 ROS_INFO("First subscription to: %s", topics.at(idx).name.c_str());
                 subList.push_back(
-                    n.subscribe<T>(topics.at(idx).name, 100, std::bind(f, std::placeholders::_1, topics.at(idx).name)));
+                        n.subscribe<TData>(topics.at(idx).name, 100, std::bind(f, obj, std::placeholders::_1, topics.at(idx).name)));
             } else {
                 subscribe = true;
                 for (int idy = 0; idy < subList.size(); ++idy) { // Check if topic already subscribed, ...
@@ -285,7 +328,7 @@ static void Mapserver<void, void>::advertiseSubscribers(
                 if (subscribe) { // ... otherwise do the subscription
                     ROS_INFO("Subscription %d to: %s", int(subList.size()+1), topics.at(idx).name.c_str());
                     subList.push_back(
-                            n.subscribe<T>(topics.at(idx).name, 100, std::bind(f, std::placeholders::_1, topics.at(idx).name)));
+                        n.subscribe<TData>(topics.at(idx).name, 100, std::bind(f, obj, std::placeholders::_1, topics.at(idx).name)));
                 }
             }
         }
@@ -300,9 +343,21 @@ static void Mapserver<void, void>::advertiseSubscribers(
   }
 }
 
+template<typename TMapstack, typename TData, typename TValue, typename TChild>
+void
+Mapserver<TMapstack, TData, TValue, TChild>::swapStack() {
+  std::swap(this->currentMapStack, this->lastMapStack);
+}
 
-template <typename TMapstack, typename TValue>
-void Mapserver<TMapstack, TValue>::tfTileNameHandler(const std_msgs::String nameMsg) {
+template<typename TMapstack, typename TData, typename TValue, typename TChild>
+bool
+Mapserver<TMapstack, TData, TValue, TChild>::mapRefreshAndStorageCondition() {
+  return (this->lastMapStack.unique() && this->currentMapStack.unique());
+}
+
+template<typename TMapstack, typename TData, typename TValue, typename TChild>
+void
+Mapserver<TMapstack, TData, TValue, TChild>::tfTileNameHandler(const std_msgs::String nameMsg) {
   bool currentTileTfNameChange = false;
   mapRefresh.lock();
   if ((nameMsg.data.back() != currentTileTfName.back())) {
@@ -310,7 +365,7 @@ void Mapserver<TMapstack, TValue>::tfTileNameHandler(const std_msgs::String name
           // First round, we bootstrap
           currentTileTfName = nameMsg.data;
       } else {
-        std::swap(currentMapStack, lastMapStack);
+        this->swapStack();
         lastTileTfName    = currentTileTfName;
         currentTileTfName = nameMsg.data;
         currentTileTfNameChange = true;
@@ -333,7 +388,7 @@ void Mapserver<TMapstack, TValue>::tfTileNameHandler(const std_msgs::String name
     // Wait until all references are gone
     std::size_t lockCnt = 0;
     const std::size_t lockCntMax = 200000; // 2 seconds if we sleep for 10 us
-    while(!(lastMapStack.unique() && currentMapStack.unique())) {
+    while(!this->mapRefreshAndStorageCondition()) {
         usleep(10);
         if (++lockCnt > lockCntMax) {
             ROS_ERROR("tfTileNameHandler: Locked for to long, skip storage (maybe deadlock or out if resources?)");
@@ -359,8 +414,8 @@ void Mapserver<TMapstack, TValue>::tfTileNameHandler(const std_msgs::String name
 
 }
 
-template <typename TMapstack, typename TValue>
-void Mapserver<TMapstack, TValue>::tupleHandler(const mapserver_msgs::pnsTuple msg) {
+template<typename TMapstack, typename TData, typename TValue, typename TChild>
+void Mapserver<TMapstack, TData, TValue, TChild>::tupleHandler(const mapserver_msgs::pnsTuple msg) {
   bool currentTileTfNameChange = false;
   static mapserver_msgs::pnsTuple lastPnsTuple;
   mapRefresh.lock();
@@ -421,8 +476,34 @@ void Mapserver<TMapstack, TValue>::tupleHandler(const mapserver_msgs::pnsTuple m
   mapRefresh.unlock();
 }
 
-template <typename TMapstack, typename TValue>
-void Mapserver<TMapstack, TValue>::storeMaps (const std_msgs::String nameMsg) {
+template<typename TMapstack, typename TData, typename TValue, typename TChild>
+void Mapserver<TMapstack, TData, TValue, TChild>::mapStorage(const std::shared_ptr<std::map<std::string, mrpt::maps::COccupancyGridMap2D*>> &mapStack,
+                          const std::string prefixString,
+                          const std::string formatString,
+                          const std::string formatUnitString,
+                          const double resolution_meterPerTile) {
+
+  const std::shared_ptr<std::map<std::string, mrpt::maps::COccupancyGridMap2D*>> dummyMap;
+  const tf::StampedTransform dummyTf;
+  const TValue dummy = 0.0;
+
+  mapRefreshAndStorage( mapStack,                                 // Map to shift/store/reset
+                        dummyMap,                                 // Nothing at all
+                        dummyTf,                                  // Transform
+                        std::string("OGM"),                       // Kind of map
+                        std::string(""),                          // Format (empty: Take from type specifier)
+                        std::string("logodds"),                   // Unit
+                        resolution_meterPerTile,                  // Resolution per tile
+                        true,                                     // Maps should be stored
+                        false,                                    // Maps should be shifted
+                        false,                                    // Map should be reseted reset
+                        dummy,                                    // Some float value
+                        false);                                   // Don't store the current position
+
+}
+
+template<typename TMapstack, typename TData, typename TValue, typename TChild>
+void Mapserver<TMapstack, TData, TValue, TChild>::storeMaps (const std_msgs::String nameMsg) {
 
   if (nameMsg.data.empty()) {
       ROS_INFO("storeMaps: Store all maps");
@@ -447,9 +528,24 @@ void Mapserver<TMapstack, TValue>::storeMaps (const std_msgs::String nameMsg) {
              resolution_mPerTile);                  // Resolution per tile
 }
 
+template<typename TMapstack, typename TData, typename TValue, typename TChild>
+void
+Mapserver<TMapstack, TData, TValue, TChild>::topicRefinement(std::string &topic) {
+  if (topic.empty()) {
+    topic = "/";
+  } else {
+    if (topic.at(0) != '/') {
+      topic = std::string("/").append(topic);
+    }
+    if (topic.at(topic.size()-1) != '/') {
+      topic.append("/");
+    }
+  }
+}
 
-template <typename TMapstack, typename TValue>
-Mapserver<TMapstack, TValue>::Mapserver(const ros::NodeHandle& nh) :
+
+template<typename TMapstack, typename TData, typename TValue, typename TChild>
+Mapserver<TMapstack, TData, TValue, TChild>::Mapserver(ros::NodeHandle& nh) :
         n(nh),
         currentTileTfName(""),
         lastTileTfName(""),
@@ -458,6 +554,7 @@ Mapserver<TMapstack, TValue>::Mapserver(const ros::NodeHandle& nh) :
         mapStorageLocation(ms::constants::mapping::ogm::mapStorageLocation),
         dontStoreMaps(0),
         shiftMap(1),
+        topicPrefix("/"),
         tileOriginTfPrefix("map_base_link_"),
         tileOriginTfSufixForRoiOrigin(ms::constants::machine::frames::names::ROI_ORIGIN),
         currentTfNameTopic("/currentTfTile"),
@@ -483,43 +580,251 @@ Mapserver<TMapstack, TValue>::Mapserver(const ros::NodeHandle& nh) :
         storageNameKind(""),
         storageNameUnit("") {
 
-  this->n.param<std::string>("tile_origin_tf_prefix", tileOriginTfPrefix);
-  this->n.param<std::string>("tile_origin_tf_sufix_for_roi_origin", tileOriginTfSufixForRoiOrigin);
-  this->n.param<std::string>("current_tf_name_topic", currentTfNameTopic);
-  this->n.param<std::string>("current_tuple_topic", currentTupleTopic);
-  this->n.param<std::string>("world_link", worldLink);
-  this->n.param<std::string>("store_maps_topic", storeMapsTopic);
-  this->n.param<std::string>("req_topic_map_stack", reqTopicMapStack);
-  this->n.param<double>("idle_startup_time", idleStartupTime_s);
-  this->n.param<int>("debug", debug);
-  this->n.param<int>("test", doTest);
-  this->n.param<double>("resolution", resolution_mPerTile);
-  this->n.param<float>("max_distance_insertion", maxDistanceInsertion);
-  this->n.param<float>("max_x_m", maxX_m);
-  this->n.param<float>("min_x_m", minX_m);
-  this->n.param<float>("max_y_m", maxY_m);
-  this->n.param<float>("min_y_m", minY_m);
-  this->n.param<float>("max_z_m", maxZ_m);
-  this->n.param<float>("min_z_m", minZ_m);
-  this->n.param<double>("mapInit_value", mapInitValue);
-  this->n.param<std::string>("map_storage_location", mapStorageLocation);
-  this->n.param<int>("shift_map", shiftMap);
-  this->n.param<int>("dont_store_maps", dontStoreMaps);
-  this->n.param<float>("rate", rate);
+//  n.param<std::string>("topic_prefix", this->topicPrefix, scopes::map::super::ogm);
+  Mapserver::n.param<std::string>("topic_prefix", this->topicPrefix, std::string("asd"));
+
+  Mapserver::n.param<std::string>("tile_origin_tf_prefix", tileOriginTfPrefix);
+  Mapserver::n.param<std::string>("tile_origin_tf_sufix_for_roi_origin", tileOriginTfSufixForRoiOrigin);
+  Mapserver::n.param<std::string>("current_tf_name_topic", currentTfNameTopic);
+  Mapserver::n.param<std::string>("current_tuple_topic", currentTupleTopic);
+  Mapserver::n.param<std::string>("world_link", worldLink);
+  Mapserver::n.param<std::string>("store_maps_topic", storeMapsTopic);
+  Mapserver::n.param<std::string>("req_topic_map_stack", reqTopicMapStack);
+  Mapserver::n.param<double>("idle_startup_time", idleStartupTime_s);
+  Mapserver::n.param<int>("debug", debug);
+  Mapserver::n.param<int>("test", doTest);
+  Mapserver::n.param<double>("resolution", resolution_mPerTile);
+  Mapserver::n.param<float>("max_distance_insertion", maxDistanceInsertion);
+  Mapserver::n.param<float>("max_x_m", maxX_m);
+  Mapserver::n.param<float>("min_x_m", minX_m);
+  Mapserver::n.param<float>("max_y_m", maxY_m);
+  Mapserver::n.param<float>("min_y_m", minY_m);
+  Mapserver::n.param<float>("max_z_m", maxZ_m);
+  Mapserver::n.param<float>("min_z_m", minZ_m);
+  Mapserver::n.param<double>("mapInit_value", mapInitValue);
+  Mapserver::n.param<std::string>("map_storage_location", mapStorageLocation);
+  Mapserver::n.param<int>("shift_map", shiftMap);
+  Mapserver::n.param<int>("dont_store_maps", dontStoreMaps);
+  Mapserver::n.param<float>("rate", rate);
 
   mapInitValueApplied = TValue(mapInitValue);
   listenerTf = new tf::TransformListener;
+  Mapserver::topicRefinement(topicPrefix);
 
+  mapSizeX = (this->maxX_m - this->minX_m) / resolution_mPerTile;
+  mapSizeY = (this->maxY_m - this->minY_m) / resolution_mPerTile;
+  mapSizeZ = (this->maxZ_m - this->minZ_m) / resolution_mPerTile;
+
+  // Check whether we should get our tile information via a tuple or just via a name
   if (currentTupleTopic.empty()) {
-      subscriberTfTileName = this->n.subscribe<std_msgs::String>(currentTfNameTopic, 2, tfTileNameHandler);
+//      subscriberTfTileName = Mapserver::n.subscribe<std_msgs::String>(currentTfNameTopic, 2, &Mapserver::tfTileNameHandler, this);
+      subscriberTfTileName = n.subscribe(currentTfNameTopic, 2, &Mapserver::tfTileNameHandler, this);
   } else {
-      subscriberTuple = this->n.subscribe<mapserver_msgs::pnsTuple>(currentTupleTopic, 2, tupleHandler);
+//      subscriberTuple = Mapserver::n.subscribe<mapserver_msgs::pnsTuple>(currentTupleTopic, 2, &Mapserver::tupleHandler, this);
+      subscriberTuple = n.subscribe(currentTupleTopic, 2, &Mapserver::tupleHandler, this);
   }
-  subscriberStoreMaps = this->n.subscribe<std_msgs::String>(storeMapsTopic, 1, storeMaps);
+
+  // Command scope to store the maps on demand
+//  subscriberStoreMaps = Mapserver::n.subscribe<std_msgs::String>(storeMapsTopic, 1, &Mapserver::storeMaps, this);
+  subscriberStoreMaps = n.subscribe(storeMapsTopic, 1, &Mapserver::storeMaps, this);
 
 }
 
-template <typename TMapstack, typename TValue>
-Mapserver<TMapstack, TValue>::~Mapserver() {
+template<typename TMapstack, typename TData, typename TValue, typename TChild>
+void
+Mapserver<TMapstack, TData, TValue, TChild>::mapRefreshAndStorage(
+                          const std::shared_ptr<std::map<std::string, TMapstack*>> &mapStack,
+                          const std::shared_ptr<std::map<std::string, TMapstack*>> &mapStackShiftedResult,
+                          const tf::StampedTransform transformRoiInWorld,
+                          const std::string prefixString,
+                          const std::string formatString,
+                          const std::string formatUnitString,
+                          const double resolution_meterPerTile,
+                          const bool storeMapStack,
+                          const bool shiftMapStack,
+                          const bool clearMapStack,
+                          TValue fillValue,
+                          bool storeCurrentPosition,
+                          std::string additionalInformationString) {
+
+
+
+  // The message from the last time the function was called (So it is the location of the center)
+  static tf::StampedTransform transformRoiInWorldLast;
+
+//  static bool runOnce = true;
+//  if (runOnce) {
+//      ROS_WARN("First run, map storage coordniates might be corrupted");
+//      transformRoiInWorldLast = transformRoiInWorld;
+//      runOnce = false;
+//  }
+
+  ROS_INFO("storeMapStack: %d", storeMapStack);
+  ROS_INFO("mapStack->size(): %d", mapStack->size());
+  if (storeMapStack) {
+    // Get the timestamp in microseconds
+//    ros::Time stamp = ros::Time::now();
+//    uint64_t timestamp = uint64_t(stamp.sec) * uint64_t(1e6) + uint64_t(stamp.nsec / 1e6);
+    // Store each layer in the map
+    for (auto it=mapStack->begin(); it!=mapStack->end(); ++it) {
+      std::cout << it->first << " => " << it->second << '\n';
+
+      // Get the format string
+      const std::string format = formatString.empty() ? std::string("INT") + std::to_string(int(OCCUPANCY_GRIDMAP_CELL_SIZE) * int(8)) : formatString;
+      // Replace the topic name "/my/topic" to "-my-topic"
+      std::string mapIdx = it->first;
+      std::replace( mapIdx.begin(), mapIdx.end(), '/', '-');
+
+      // Get the filename
+      std::ostringstream oss;
+      oss << std::setprecision(2)
+          << mapStorageLocation
+          << "What_" << prefixString << "_"
+          << "T_" << ros::Time::now() << "s.ns_"
+          << "Format_" << format << "_"
+          << "Unit_" << formatUnitString << "_"
+          << "Layer_" << mapIdx << "_"
+          << "Res_" << int(round(resolution_meterPerTile * double(geometry::millimeterPerMeter))) <<  "mm_"
+          << "X_" << transformRoiInWorldLast.getOrigin().x() << "m_"
+          << "Y_" << transformRoiInWorldLast.getOrigin().y() << "m_"
+          << "Z_" << transformRoiInWorldLast.getOrigin().z() << "m_"
+          << "rows_" << it->second->getSizeY() << "_"
+          << "cols_" << it->second->getSizeX() << "_"
+          << additionalInformationString << "_"
+          << ".bin";
+
+      ROS_INFO("Store map to: %s\nWith format: %s\n", oss.str().c_str(), format.c_str());
+
+      // Store the layer
+      std::ofstream f;
+      f.open(oss.str(), std::ofstream::out | std::ofstream::binary);
+      if (f.is_open()) {
+         f.write((char*)it->second->getRawMap().data(),
+                 it->second->getSizeX() * it->second->getSizeY() * OCCUPANCY_GRIDMAP_CELL_SIZE);
+         f.close();
+      } else {
+          ROS_ERROR("Unable to open file %s\n", oss.str().c_str());
+      }
+    }
+  }
+
+  // Shift the map
+  if (shiftMapStack) {
+    // Calculate the shift as indices
+    const double xdiff_m = transformRoiInWorldLast.getOrigin().x() - transformRoiInWorld.getOrigin().x();
+    const double ydiff_m = transformRoiInWorldLast.getOrigin().y() - transformRoiInWorld.getOrigin().y();
+    const double zdiff_m = transformRoiInWorldLast.getOrigin().y() - transformRoiInWorld.getOrigin().y();
+
+    ROS_INFO("Current (x,y,z) in m: %f, %f, %f", transformRoiInWorld.getOrigin().x(), transformRoiInWorld.getOrigin().y(), transformRoiInWorld.getOrigin().z());
+    ROS_INFO("Last    (x,y,z) in m: %f, %f, %f", transformRoiInWorldLast.getOrigin().x(), transformRoiInWorldLast.getOrigin().y(), transformRoiInWorldLast.getOrigin().z());
+    ROS_INFO("Diff    (x,y,z) in m: %f, %f, %f", xdiff_m, ydiff_m, zdiff_m);
+
+    const int xshift_tiles = int(std::round(xdiff_m / resolution_meterPerTile));
+    const int yshift_tiles = int(std::round(ydiff_m / resolution_meterPerTile));
+
+//    ROS_INFO_STREAM( "\nydiff_m: " << ydiff_m <<
+//                     "\nresolution_meterPerTile: " << resolution_meterPerTile <<
+//                     "\nydiff_m / resolution_meterPerTile: " << ydiff_m / resolution_meterPerTile <<
+//                     "\n-ydiff_m / resolution_meterPerTile: " << ydiff_m / resolution_meterPerTile <<
+//                     "\n-ydiff_m / resolution_meterPerTile: " << ydiff_m / resolution_meterPerTile);
+
+    ROS_INFO("Shift of the map (res: %0.2f m/tile): x=%d tiles s.t. %f m , y=%d tiles s.t. %f m", resolution_meterPerTile, xshift_tiles, -xdiff_m, yshift_tiles, -ydiff_m);
+
+    auto itDst = mapStackShiftedResult->begin();
+    for (auto itSrc=mapStack->begin(); itSrc!=mapStack->end(); ++itSrc, ++itDst) {
+#if defined(OCCUPANCY_GRIDMAP_CELL_SIZE_8BITS)
+      const int opencvType = CV_8SC1;
+#else // defined(OCCUPANCY_GRIDMAP_CELL_SIZE_16BITS)
+      const int opencvType = CV_16SC1;
+#endif
+      cv::Mat src(itSrc->second->getSizeY(), itSrc->second->getSizeX(), opencvType, (void*)(itSrc->second->getRawMap().data()));
+      cv::Mat dst(itDst->second->getSizeY(), itDst->second->getSizeX(), opencvType, (void*)(itDst->second->getRawMap().data()));
+      translateMap(src, dst, xshift_tiles, yshift_tiles, fillValue);
+    }
+  }
+
+  // Clear the map
+  if (clearMapStack) {
+    ROS_ERROR("Clear the map");
+    for (std::map<std::string, mrpt::maps::COccupancyGridMap2D*>::iterator it=mapStack->begin(); it!=mapStack->end(); ++it) {
+      it->second->fill(fillValue);
+    }
+  }
+
+  if (storeCurrentPosition) {
+      transformRoiInWorldLast = transformRoiInWorld; // Store the new location for the next time
+  }
+
+}
+
+template<typename TMapstack, typename TData, typename TValue, typename TChild>
+Mapserver<TMapstack, TData, TValue, TChild>::~Mapserver() {
   delete listenerTf;
 }
+
+
+
+// Translate a map
+template<typename TMapstack, typename TData, typename TValue, typename TChild>
+void
+Mapserver<TMapstack, TData, TValue, TChild>::translateMap(cv::Mat &src, cv::Mat &dst, double offsetx, double offsety, TValue fillValue) {
+
+  // Define a transformation for the image
+  const cv::Mat trans_mat = (cv::Mat_<double>(2,3) << 1, 0, offsetx, 0, 1, offsety);
+
+  // Warp the image (which refers to the map)
+  cv::warpAffine(src, dst, trans_mat,
+                 cv::Size(src.rows, src.cols),
+                 cv::INTER_NEAREST,
+                 cv::BORDER_CONSTANT,
+                 cv::Scalar(static_cast<double>(fillValue)));
+
+}
+
+
+// Set all map tiles of all maps to the given value
+template<typename TMapstack, typename TData, typename TValue, typename TChild>
+void
+Mapserver<TMapstack, TData, TValue, TChild>::fillMapStack(std::vector<TMapstack> &mapStack, float value) {
+  for (uint idx = 0; idx < mapStack.size(); ++idx) {
+    mapStack[idx].fill (value);  // Fill every map with uncertainty
+  }
+}
+
+// Translate a map
+template<typename TMapstack, typename TData, typename TValue, typename TChild>
+void
+Mapserver<TMapstack, TData, TValue, TChild>::translateMap(TMapstack &map, int offsetx, int offsety, float fillProbability) {
+
+  // Define a transformation for the image
+  cv::Mat trans_mat = (cv::Mat_<double>(2,3) << 1, 0, static_cast<double>(offsetx), 0, 1, static_cast<double>(offsety));
+
+  // Get the raw data as an image
+  cv::Mat mapAsImage(static_cast<int>(map.getSizeY()),
+                     static_cast<int>(map.getSizeX()),
+#if defined(OCCUPANCY_GRIDMAP_CELL_SIZE_8BITS)
+  CV_8SC1
+#else // defined(OCCUPANCY_GRIDMAP_CELL_SIZE_16BITS)
+  CV_16SC1
+#endif
+                     , (void*)&map.getRawMap()[0]);
+
+  // Warp the image (which refers to the map)
+  cv::warpAffine(mapAsImage,mapAsImage,trans_mat,
+                 cv::Size(static_cast<int>(map.getSizeX()), static_cast<int>(map.getSizeY())),
+                 cv::INTER_NEAREST,
+                 cv::BORDER_CONSTANT,
+                 cv::Scalar(static_cast<double>(mrpt::maps::COccupancyGridMap2D::p2l(fillProbability))));
+}
+
+// Translate a stack of maps
+template<typename TMapstack, typename TData, typename TValue, typename TChild>
+void
+Mapserver<TMapstack, TData, TValue, TChild>::translateMapStack(const std::shared_ptr<std::map<std::string, TMapstack*>> &mapStack, int offsetx, int offsety, float fillProbability) {
+  for (auto it=mapStack->begin(); it!=mapStack->end(); ++it) {
+    translateMap(*it->second, offsetx, offsety , fillProbability);
+  }
+}
+
+
+

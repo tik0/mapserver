@@ -93,10 +93,10 @@ namespace mapping {
     /** \brief Maximum vertical coordinate (y) */
     const double yMax = height - originHeight; // meter
     
-    /** \brief Minimum vertical coordinate (y) */
+    /** \brief Minimum vertical coordinate (z) */
     const double zMin = originAltitude - altitude; // meter
 
-    /** \brief Maximum vertical coordinate (y) */
+    /** \brief Maximum vertical coordinate (z) */
     const double zMax = altitude - originHeight; // meter
 
     namespace discrete {
@@ -110,10 +110,10 @@ namespace mapping {
       const size_t numCells = width * height;
       
       /** \brief Coordinate system origin in lateral (x) direction */
-      const size_t originWidth = width / 2.0; // meter
+      const size_t originWidth = width / 2.0;
       
       /** \brief Coordinate system origin in vertical (y) direction */
-      const size_t originHeight = height / 2.0; // meter
+      const size_t originHeight = height / 2.0;
       
       /** \brief Minimum lateral coordinate (x) */
       const size_t xMin = originWidth - width;
@@ -125,7 +125,13 @@ namespace mapping {
       const size_t yMin = originHeight - height;
       
       /** \brief Maximum vertical coordinate (y) */
-      const size_t yMax = height - originHeight;      
+      const size_t yMax = height - originHeight;
+
+      /** \brief Minimum vertical coordinate (z) */
+      const double zMin = originAltitude - altitude;
+
+      /** \brief Maximum vertical coordinate (z) */
+      const double zMax = altitude - originHeight;
     }
   }
   
