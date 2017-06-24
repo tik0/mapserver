@@ -2,8 +2,8 @@
  <launch>
   <!-- ISM Mapserver -->
     <!--We assume that the robot is centered in the ROI-->
-  <arg name="roi_width" value="35.0" /> <!-- (m) x -->
-  <arg name="roi_height" value="35.0" /> <!-- (m) y -->
+  <arg name="roi_width" value="50.0" /> <!-- (m) x -->
+  <arg name="roi_height" value="50.0" /> <!-- (m) y -->
   <arg name="roi_altitude" value="0.0" /> <!-- (m) z NOT USED-->
   
   
@@ -77,7 +77,7 @@
     <param name="min_x_m" value="$(eval -arg('roi_width') / 2)" />
     <param name="min_y_m" value="$(eval -arg('roi_height') / 2)" />
     <param name="rate" value="10" />
-    <param name="map_storage_location" value="/tmp/" />
+    <param name="map_storage_location" value="/opt/tmp/" />
   </node>
 
  </launch>
