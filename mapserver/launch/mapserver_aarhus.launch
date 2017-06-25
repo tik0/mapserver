@@ -2,8 +2,8 @@
  <launch>
   <!-- ISM Mapserver -->
     <!--We assume that the robot is centered in the ROI-->
-  <arg name="roi_width" value="35.0" /> <!-- (m) x -->
-  <arg name="roi_height" value="35.0" /> <!-- (m) y -->
+  <arg name="roi_width" value="50.0" /> <!-- (m) x -->
+  <arg name="roi_height" value="50.0" /> <!-- (m) y -->
   <arg name="roi_altitude" value="0.0" /> <!-- (m) z NOT USED-->
   
   
@@ -63,7 +63,7 @@
     <param name="current_tuple_topic" type="string" value="/currentTuple" />
     <param name="world_link" type="string" value="odom" />
     <param name="resolution" value="0.02" />
-    <param name="maxOccupancyUpdateCertainty" value="255" />
+    <param name="max_occupancy_update_certainty" value="255" />
     <param name="max_distance_insertion" value="10" />
     <param name="ism_scope_prefix" type="string" value="/ism" />
     <param name="shift_map" type="int" value="1" />
@@ -78,6 +78,9 @@
     <param name="min_y_m" value="$(eval -arg('roi_height') / 2)" />
     <param name="rate" value="10" />
     <param name="map_storage_location" value="/opt/tmp/" />
+    <param name="storage_map_name" value="OGM" />
+    <param name="storage_format_name" value="" />
+    <param name="storage_unit_name" value="logodds" />
   </node>
 
  </launch>

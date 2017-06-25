@@ -133,7 +133,7 @@ class Mapserver {
   //! Storage name: Kind of map
   std::string storageNameMapKind;
   //! Storage name: Format (empty: Take from type specifier)
-  std::string storageNameKind;
+  std::string storageNameFormat;
   //! Storage name: Unit
   std::string storageNameUnit;
 
@@ -402,7 +402,7 @@ Mapserver<TMapstack, TData, TValue, TChild>::tfTileNameHandler(const std_msgs::S
                           currentMapStack,                       // The result of the shifted map
                           transformRoiInWorld,                   // Transform
                           storageNameMapKind,                    // Kind of map
-                          storageNameKind,                       // Format (empty: Take from type specifier)
+                          storageNameFormat,                     // Format (empty: Take from type specifier)
                           storageNameUnit,                       // Unit
                           resolution_mPerTile,                   // Resolution per tile
                           !dontStoreMaps,                        // Info if maps should be stored
@@ -461,7 +461,7 @@ void Mapserver<TMapstack, TData, TValue, TChild>::tupleHandler(const mapserver_m
                            currentMapStack,                       // The result of the shifted map
                            transformRoiInWorld,                   // Transform
                            storageNameMapKind,                    // Kind of map
-                           storageNameKind,                       // Format (empty: Take from type specifier)
+                           storageNameFormat,                       // Format (empty: Take from type specifier)
                            storageNameUnit,                       // Unit
                            resolution_mPerTile,                   // Resolution per tile
                            !dontStoreMaps,                        // Info if maps should be stored
@@ -524,7 +524,7 @@ void Mapserver<TMapstack, TData, TValue, TChild>::storeMaps (const std_msgs::Str
 
   mapStorage(currentMapStack,
              storageNameMapKind,                    // Kind of map
-             storageNameKind,                       // Format (empty: Take from type specifier)
+             storageNameFormat,                       // Format (empty: Take from type specifier)
              storageNameUnit,                       // Unit
              resolution_mPerTile);                  // Resolution per tile
 }
@@ -578,7 +578,7 @@ Mapserver<TMapstack, TData, TValue, TChild>::Mapserver(ros::NodeHandle *nh, TChi
         doTest(0),
         rate(1.0),
         storageNameMapKind(""),
-        storageNameKind(""),
+        storageNameFormat(""),
         storageNameUnit("") {
 
 //  n.param<std::string>("topic_prefix", this->topicPrefix, scopes::map::super::ogm);
@@ -607,6 +607,10 @@ Mapserver<TMapstack, TData, TValue, TChild>::Mapserver(ros::NodeHandle *nh, TChi
   n->param<int>("shift_map", this->shiftMap);
   n->param<int>("dont_store_maps", this->dontStoreMaps);
   n->param<float>("rate", this->rate);
+  n->param<std::string>("storage_map_name", this->storageNameMapKind);
+  n->param<std::string>("storage_format_name", this->storageNameFormat);
+  n->param<std::string>("storage_unit_name", this->storageNameUnit);
+
 
   mapInitValueApplied = TValue(mapInitValue);
   listenerTf = new tf::TransformListener;
