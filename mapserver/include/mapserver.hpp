@@ -15,6 +15,7 @@
 
 // ROS
 #include <ros/ros.h>
+#include <ros/forwards.h>
 #include <ros/spinner.h>
 #include <ros/console.h>
 #include <std_msgs/String.h>
@@ -43,9 +44,9 @@ template<typename TMapstack, typename TData, typename TValue, typename TChild>
 class Mapserver {
 
  public:
-  Mapserver(ros::NodeHandle& nh);
+  Mapserver(ros::NodeHandle *nh, TChild* obj);
 
-  ~Mapserver();
+  virtual ~Mapserver();
 
   ///
   /// \brief Add subscriber to newly emerged topic with super-topic
@@ -65,7 +66,7 @@ class Mapserver {
 
  protected:
   //! The node handle
-  ros::NodeHandle n;
+  ros::NodeHandle *n;
   //! Holding the current tile name
   std::string currentTileTfName;
   //! Holding the former tile name
@@ -316,7 +317,7 @@ void Mapserver<TMapstack, TData, TValue, TChild>::advertiseSubscribers(
             if(subList.empty()) { // If we haven't subscribed to anything yet, get the first
                 ROS_INFO("First subscription to: %s", topics.at(idx).name.c_str());
                 subList.push_back(
-                        n.subscribe<TData>(topics.at(idx).name, 100, std::bind(f, obj, std::placeholders::_1, topics.at(idx).name)));
+                        n->subscribe<TData>(topics.at(idx).name, 100, std::bind(f, obj, std::placeholders::_1, topics.at(idx).name)));
             } else {
                 subscribe = true;
                 for (int idy = 0; idy < subList.size(); ++idy) { // Check if topic already subscribed, ...
@@ -328,7 +329,7 @@ void Mapserver<TMapstack, TData, TValue, TChild>::advertiseSubscribers(
                 if (subscribe) { // ... otherwise do the subscription
                     ROS_INFO("Subscription %d to: %s", int(subList.size()+1), topics.at(idx).name.c_str());
                     subList.push_back(
-                        n.subscribe<TData>(topics.at(idx).name, 100, std::bind(f, obj, std::placeholders::_1, topics.at(idx).name)));
+                        n->subscribe<TData>(topics.at(idx).name, 100, std::bind(f, obj, std::placeholders::_1, topics.at(idx).name)));
                 }
             }
         }
@@ -545,7 +546,7 @@ Mapserver<TMapstack, TData, TValue, TChild>::topicRefinement(std::string &topic)
 
 
 template<typename TMapstack, typename TData, typename TValue, typename TChild>
-Mapserver<TMapstack, TData, TValue, TChild>::Mapserver(ros::NodeHandle& nh) :
+Mapserver<TMapstack, TData, TValue, TChild>::Mapserver(ros::NodeHandle *nh, TChild* obj) :
         n(nh),
         currentTileTfName(""),
         lastTileTfName(""),
@@ -581,31 +582,31 @@ Mapserver<TMapstack, TData, TValue, TChild>::Mapserver(ros::NodeHandle& nh) :
         storageNameUnit("") {
 
 //  n.param<std::string>("topic_prefix", this->topicPrefix, scopes::map::super::ogm);
-  Mapserver::n.param<std::string>("topic_prefix", this->topicPrefix, std::string("asd"));
+  n->param<std::string>("topic_prefix", this->topicPrefix, std::string("/ism"));
 
-  Mapserver::n.param<std::string>("tile_origin_tf_prefix", tileOriginTfPrefix);
-  Mapserver::n.param<std::string>("tile_origin_tf_sufix_for_roi_origin", tileOriginTfSufixForRoiOrigin);
-  Mapserver::n.param<std::string>("current_tf_name_topic", currentTfNameTopic);
-  Mapserver::n.param<std::string>("current_tuple_topic", currentTupleTopic);
-  Mapserver::n.param<std::string>("world_link", worldLink);
-  Mapserver::n.param<std::string>("store_maps_topic", storeMapsTopic);
-  Mapserver::n.param<std::string>("req_topic_map_stack", reqTopicMapStack);
-  Mapserver::n.param<double>("idle_startup_time", idleStartupTime_s);
-  Mapserver::n.param<int>("debug", debug);
-  Mapserver::n.param<int>("test", doTest);
-  Mapserver::n.param<double>("resolution", resolution_mPerTile);
-  Mapserver::n.param<float>("max_distance_insertion", maxDistanceInsertion);
-  Mapserver::n.param<float>("max_x_m", maxX_m);
-  Mapserver::n.param<float>("min_x_m", minX_m);
-  Mapserver::n.param<float>("max_y_m", maxY_m);
-  Mapserver::n.param<float>("min_y_m", minY_m);
-  Mapserver::n.param<float>("max_z_m", maxZ_m);
-  Mapserver::n.param<float>("min_z_m", minZ_m);
-  Mapserver::n.param<double>("mapInit_value", mapInitValue);
-  Mapserver::n.param<std::string>("map_storage_location", mapStorageLocation);
-  Mapserver::n.param<int>("shift_map", shiftMap);
-  Mapserver::n.param<int>("dont_store_maps", dontStoreMaps);
-  Mapserver::n.param<float>("rate", rate);
+  n->param<std::string>("tile_origin_tf_prefix", this->tileOriginTfPrefix);
+  n->param<std::string>("tile_origin_tf_sufix_for_roi_origin", this->tileOriginTfSufixForRoiOrigin);
+  n->param<std::string>("current_tf_name_topic", this->currentTfNameTopic);
+  n->param<std::string>("current_tuple_topic", this->currentTupleTopic);
+  n->param<std::string>("world_link", this->worldLink);
+  n->param<std::string>("store_maps_topic", this->storeMapsTopic);
+  n->param<std::string>("req_topic_map_stack", this->reqTopicMapStack);
+  n->param<double>("idle_startup_time", this->idleStartupTime_s);
+  n->param<int>("debug", this->debug);
+  n->param<int>("test", this->doTest);
+  n->param<double>("resolution", this->resolution_mPerTile);
+  n->param<float>("max_distance_insertion", this->maxDistanceInsertion);
+  n->param<float>("max_x_m", this->maxX_m);
+  n->param<float>("min_x_m", this->minX_m);
+  n->param<float>("max_y_m", this->maxY_m);
+  n->param<float>("min_y_m", this->minY_m);
+  n->param<float>("max_z_m", this->maxZ_m);
+  n->param<float>("min_z_m", this->minZ_m);
+  n->param<double>("mapInit_value", this->mapInitValue);
+  n->param<std::string>("map_storage_location", this->mapStorageLocation);
+  n->param<int>("shift_map", this->shiftMap);
+  n->param<int>("dont_store_maps", this->dontStoreMaps);
+  n->param<float>("rate", this->rate);
 
   mapInitValueApplied = TValue(mapInitValue);
   listenerTf = new tf::TransformListener;
@@ -618,15 +619,15 @@ Mapserver<TMapstack, TData, TValue, TChild>::Mapserver(ros::NodeHandle& nh) :
   // Check whether we should get our tile information via a tuple or just via a name
   if (currentTupleTopic.empty()) {
 //      subscriberTfTileName = Mapserver::n.subscribe<std_msgs::String>(currentTfNameTopic, 2, &Mapserver::tfTileNameHandler, this);
-      subscriberTfTileName = n.subscribe(currentTfNameTopic, 2, &Mapserver::tfTileNameHandler, this);
+      this->subscriberTfTileName = n->subscribe(currentTfNameTopic, 2, &Mapserver::tfTileNameHandler, this);
   } else {
 //      subscriberTuple = Mapserver::n.subscribe<mapserver_msgs::pnsTuple>(currentTupleTopic, 2, &Mapserver::tupleHandler, this);
-      subscriberTuple = n.subscribe(currentTupleTopic, 2, &Mapserver::tupleHandler, this);
+      this->subscriberTuple = n->subscribe(currentTupleTopic, 2, &Mapserver::tupleHandler, this);
   }
 
   // Command scope to store the maps on demand
 //  subscriberStoreMaps = Mapserver::n.subscribe<std_msgs::String>(storeMapsTopic, 1, &Mapserver::storeMaps, this);
-  subscriberStoreMaps = n.subscribe(storeMapsTopic, 1, &Mapserver::storeMaps, this);
+  this->subscriberStoreMaps = n->subscribe(this->storeMapsTopic, 1, &Mapserver::storeMaps, this);
 
 }
 
@@ -659,8 +660,8 @@ Mapserver<TMapstack, TData, TValue, TChild>::mapRefreshAndStorage(
 //      runOnce = false;
 //  }
 
-  ROS_INFO("storeMapStack: %d", storeMapStack);
-  ROS_INFO("mapStack->size(): %d", mapStack->size());
+  ROS_INFO_STREAM("storeMapStack: " << storeMapStack);
+  ROS_INFO_STREAM("mapStack->size(): " << mapStack->size());
   if (storeMapStack) {
     // Get the timestamp in microseconds
 //    ros::Time stamp = ros::Time::now();

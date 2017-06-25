@@ -1055,7 +1055,7 @@ bool mapStatServerMapStack(mapserver::ismStackFloat::Request &req, mapserver::is
 
 
 
-  MapserverStat(ros::NodeHandle& nh) : Mapserver(nh), n(nh) {
+  MapserverStat(ros::NodeHandle& nh) : Mapserver(&nh, this), n(nh) {
 
     this->n.param<std::string>("debug_ism_topic", debugIsmTopic, "/ism/radar/tracking/radar_return"); // The topic of the ISM which is resend as transformed ISM in the mapserver frame
     this->n.param<std::string>("debug_topic", debugTopic, "/amiro2/ism/cam"); // The topic of the fused map to show via opencv
@@ -1135,6 +1135,7 @@ bool mapStatServerMapStack(mapserver::ismStackFloat::Request &req, mapserver::is
     spinner.start();
     // Do stuff periodically
     ros::Rate _rate(rate);
+    ROS_ERROR("Mapserver starts spinning");
     while(ros::ok()) {
       this->spinOnce();
       _rate.sleep();
