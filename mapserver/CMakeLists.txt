@@ -156,7 +156,6 @@ include_directories(
   ${Boost_INCLUDE_DIRS}
   ${MRPT_INCLUDE_DIRS}
   ${catkin_INCLUDE_DIRS}
-#   /opt/repositories/aarhus/src/project/ros/src/mapserver/mapserver/include
   ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 

@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 #include <stdlib.h>
-#include <Constants.h>
+#include <Constants.hpp>
 
 //ROS
 #include <ros/ros.h>
@@ -17,7 +17,7 @@
 
 #include <mapserver/ismStackFloat.h>
 
-using namespace ms::constants;
+using namespace constants;
 
 ros::ServiceClient client;
 

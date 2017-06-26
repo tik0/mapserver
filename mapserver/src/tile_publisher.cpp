@@ -2,10 +2,10 @@
 #include <tuple>
 #include <mutex>
 
-#include <Constants.h>
-using namespace ms::constants;
-using namespace ms::constants::mappingLayers;
-namespace msNumeric = ms::constants::numeric;
+#include <Constants.hpp>
+using namespace constants;
+using namespace constants::mappingLayers;
+namespace numerics = constants::numeric;
 
 // ROS
 #include <ros/ros.h>
@@ -206,7 +206,7 @@ int main(int argc, char **argv) {
                   -mapping::roi::originHeight);  // (m) Translation in width from the center to the origin of the map in height
   n.param<double>("roi_too_origin_trans_altitude", roiTooOriginTransAltitude,
                   -mapping::roi::originAltitude);  // (m) Translation in width from the center to the origin of the map in altitude
-  roi_roiOrigin = ms::constants::machine::tf::trans<double>(
+  roi_roiOrigin = ctf::trans<double>(
       roiTooOriginTransWidth, roiTooOriginTransHeight,
       roiTooOriginTransAltitude);
 

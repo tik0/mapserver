@@ -21,10 +21,11 @@
 #include <map>
 #include <memory>
 
-#include "Constants.hpp"
-using namespace ms::constants;
-using namespace ms::constants::mappingLayers;
-namespace msNumeric = ms::constants::numeric;
+#include <Constants.hpp>
+
+using namespace constants;
+using namespace constants::mappingLayers;
+namespace numerics = constants::numeric;
 
 // OpenCV
 #include <opencv2/opencv.hpp>

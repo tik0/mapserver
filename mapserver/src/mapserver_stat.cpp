@@ -53,30 +53,6 @@ std::shared_ptr<cv::Mat> MapserverStat::mrptOggToGrayScale(
   return dst;
 }
 
-std::shared_ptr<cv::Mat> MapserverStat::rosOggToGrayScale(
-    nav_msgs::OccupancyGrid::ConstPtr map) {
-
-  std::shared_ptr<cv::Mat> dst;
-
-  if (map) {
-    if (map->info.width > 0 && map->info.height > 0) {
-      dst = std::shared_ptr<cv::Mat>(
-          new cv::Mat(map->info.height, map->info.width, CV_8UC1));
-//      dst->setTo(cv::Scalar(127,127,127)); // to set all values to 127 (aka unknown)
-
-      for (int idx = 0; idx < map->data.size(); ++idx) {
-        const int oggValue = int(map->data.at(idx));
-        const int intensity = oggValue < 0 ? 50 : oggValue;
-        dst->at<uchar>(idx) = uchar(float(intensity) * 2.55);
-      }
-    }
-  }
-
-//  DEBUG_MSG("Server returns map")
-//   cv::flip(*dst, *dst, 0);  // horizontal flip
-  return dst;
-}
-
 ///
 /// \brief Returns the pose in the desired frame
 /// \param poseInSourceFrame Stamped pose in the source frame
@@ -533,7 +509,7 @@ void MapserverStat::calcIsm4Mapserver(const double xIsmCenter_m,
                               ismResized.size().width / 2.0f);
   cv::Mat rotation(2, 3, CV_32FC1);
   rotation = cv::getRotationMatrix2D(centerISM, -phiIsm_rad * rad2deg,
-                                     1.0f/*ZoomFactor*/);  // Negative angle, because OpenCV is CW regarding our convention
+                                     1.0/*ZoomFactor*/);  // Negative angle, because OpenCV is CW regarding our convention
   cv::Mat ismRotated;
   cv::warpAffine(ismResized, ismRotated, rotation, ismResized.size(),
                  cv::INTER_NEAREST, cv::BORDER_CONSTANT,
@@ -1166,7 +1142,7 @@ void MapserverStat::spinOnce() {
   if (debug) {
     try {
       //            std::shared_ptr<cv::Mat> image(mrptOggToGrayScale(*currentMapStack->at(debugTopic)));
-      //            std::shared_ptr<cv::Mat> image(rosOggToGrayScale(msgTmp));
+      //            std::shared_ptr<cv::Mat> image(Mapserver::rosOccToGrayScale(msgTmp));
       //              if (image) {
       //                  cv::flip(*image, *image, 0);
       //                  cv::imshow( "Current View", *image);

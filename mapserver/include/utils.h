@@ -10,10 +10,10 @@
 #include <math.h>
 #include <algorithm>
 #include <chrono>  // c++11
-#include <Constants.h>
-using namespace ms::constants;
-using namespace ms::constants::mappingLayers;
-namespace msNumeric = ms::constants::numeric;
+#include <Constants.hpp>
+using namespace constants;
+using namespace constants::mappingLayers;
+namespace numerics = constants::numeric;
 
 namespace utils {
 
@@ -136,9 +136,9 @@ tf::Transform transform;
 tf::Matrix3x3 rotation;
 tf::Quaternion q;
 tf::Vector3 translation;
-tf::vectorEigenToTF(machine::tf::getTrans<double>(M), translation);
+tf::vectorEigenToTF(ctf::getTrans<double>(M), translation);
 transform.setOrigin(translation);
-tf::matrixEigenToTF (machine::tf::getRot<double>(M), rotation);
+tf::matrixEigenToTF (ctf::getRot<double>(M), rotation);
 rotation.getRotation(q);
 transform.setRotation(q);
 return transform;
@@ -524,7 +524,7 @@ const double wView = width_m < srcResolution ? srcResolution : width_m;// Meter
 const double hView = height_m < srcResolution ? srcResolution : height_m;// Meter
 const double zRotView = zRotation_rad;// rad
 
-Eigen::Matrix4d machineRoi_view = machine::tf::trans<double>(xView, yView, 0.0) * machine::tf::rotZ<double>(zRotView);
+Eigen::Matrix4d machineRoi_view = ctf::trans<double>(xView, yView, 0.0) * ctf::rotZ<double>(zRotView);
 Eigen::Matrix4d roi_view = roi_machineRoi * machineRoi_view;
 Eigen::Matrix4d roiOrigin_view = machine::frames::roi_roiOrigin.inverse() * roi_view;
 double xViewOrig = utils::eigen::getXTranslation<double>(roiOrigin_view);
@@ -568,11 +568,11 @@ cv::Mat croppedROI=srcConverted(boundingRect);
 // perform the affine transformation
 cv::Scalar boarderExtrapolationScalar;
 switch (src.type()) {
-case CV_32SC1: boarderExtrapolationScalar = cv::Scalar_<int32_t>(msNumeric::invalidValue_int32); break;
-case CV_16SC1: boarderExtrapolationScalar = cv::Scalar_<int16_t>(msNumeric::invalidValue_int16); break;
-case CV_8SC1: boarderExtrapolationScalar = cv::Scalar_<int8_t>(msNumeric::invalidValue_int8); break;
-case CV_64FC1: boarderExtrapolationScalar = cv::Scalar_<double>(msNumeric::invalidValue_double); break;
-case CV_32FC1: boarderExtrapolationScalar = cv::Scalar_<float>(msNumeric::invalidValue_float); break;
+case CV_32SC1: boarderExtrapolationScalar = cv::Scalar_<int32_t>(numerics::invalidValue_int32); break;
+case CV_16SC1: boarderExtrapolationScalar = cv::Scalar_<int16_t>(numerics::invalidValue_int16); break;
+case CV_8SC1: boarderExtrapolationScalar = cv::Scalar_<int8_t>(numerics::invalidValue_int8); break;
+case CV_64FC1: boarderExtrapolationScalar = cv::Scalar_<double>(numerics::invalidValue_double); break;
+case CV_32FC1: boarderExtrapolationScalar = cv::Scalar_<float>(numerics::invalidValue_float); break;
 default: throw std::runtime_error(std::string("cutView: Unsupported source type")); break;
 }
   // get angle and size from the bounding box

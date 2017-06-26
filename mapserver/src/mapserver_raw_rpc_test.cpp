@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 #include <stdlib.h>
-#include <Constants.h>
+#include <Constants.hpp>
 
 //ROS
 #include <ros/ros.h>
@@ -19,7 +19,7 @@
 #include <mapserver_msgs/mapPrimitive.h>
 #include <mapserver/rsm.h>
 
-using namespace ms::constants;
+using namespace constants;
 
 ros::ServiceClient client;
 
@@ -53,7 +53,7 @@ void callService() {
   req.request.resolution = resolution_meterPerTile;
 
   tf::Quaternion q;
-  double roll = 0.0, pitch = 0.0, yaw = yaw_deg * deg2rad;
+  double roll = 0.0, pitch = 0.0, yaw = yaw_deg * constants::deg2rad;
   q.setRPY(roll, pitch, yaw);
   tf::quaternionTFToMsg(q, req.request.pose.pose.orientation);
 
@@ -78,7 +78,7 @@ void callService() {
         uint16_t val = 0;
 
         if (resVal >= 0.0f
-            && resVal != ms::constants::numeric::invalidValue_float) {
+            && resVal != constants::numeric::invalidValue_float) {
           val = static_cast<uint16_t>(resVal) + 1;
         } else {
           // val=0;
@@ -116,7 +116,7 @@ int main(int argc, char **argv) {
   node.param<float>("req_resolution_meterPerTile", resolution_meterPerTile,
                     0.1);
   node.param<std::string>("req_frame_id", frameId,
-                          machine::frames::names::BASE_LINK);
+                          constants::machine::frames::names::BASE_LINK);
   node.param<float>("req_width_m", width_m, 10);
   node.param<float>("req_height_m", height_m, 1);
   node.param<float>("req_depth_m", depth_m, 1);
@@ -126,8 +126,8 @@ int main(int argc, char **argv) {
   node.param<std::string>(
       "req_service_name",
       serviceName,
-      scopes::map::rawServer::parent + std::string("/")
-          + scopes::map::rawServer::requests::meanHeight);
+      constants::scopes::map::rawServer::parent + std::string("/")
+          + constants::scopes::map::rawServer::requests::meanHeight);
 
   //Get rawmapserver service
   client = node.serviceClient<mapserver::rsm>(serviceName);

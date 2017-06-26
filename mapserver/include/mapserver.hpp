@@ -292,6 +292,13 @@ class Mapserver {
                     double offsety, TValue fillValue);
 
   ///
+  /// \brief Converts and occupancy grid map to a grayscale image in open cv
+  /// \param map The occupnacy grid map
+  /// \return Shared point on image. Pointer is zero, if image allocation fails
+  ///
+  static std::shared_ptr<cv::Mat> rosOccToGrayScale(nav_msgs::OccupancyGrid::ConstPtr map);
+
+  ///
   /// \brief Translates a mapstack and fills up the boarders
   /// \param mapStack
   /// \param offsetx Offset to move in X pixel direction
@@ -599,13 +606,13 @@ Mapserver<TMapstack, TData, TValue, TChild>::Mapserver(ros::NodeHandle *nh)
       lastTileTfName(""),
       mapSizeX(1),
       mapSizeY(1),
-      mapStorageLocation(ms::constants::mapping::ogm::mapStorageLocation),
+      mapStorageLocation(constants::mapping::ogm::mapStorageLocation),
       dontStoreMaps(0),
       shiftMap(1),
       topicPrefix("/ism"),
       tileOriginTfPrefix("map_base_link_"),
       tileOriginTfSufixForRoiOrigin(
-          ms::constants::machine::frames::names::ROI_ORIGIN),
+          constants::machine::frames::names::ROI_ORIGIN),
       currentTfNameTopic("/currentTfTile"),
       currentTupleTopic(""),
       adaptiveSubscriptionTopicPrefix(""),
@@ -613,18 +620,18 @@ Mapserver<TMapstack, TData, TValue, TChild>::Mapserver(ros::NodeHandle *nh)
       storeMapsTopic("/storemaps"),
       reqTopicMapStack("/reqMapStack"),
       idleStartupTime_s(-1.0),
-      resolution_mPerTile(ms::constants::mapping::discreteResolution),
+      resolution_mPerTile(constants::mapping::discreteResolution),
       maxDistanceInsertion(
           std::min(
-              ms::constants::mapping::roi::altitude,
-              std::min(ms::constants::mapping::roi::width,
-                       ms::constants::mapping::roi::height))),
-      maxX_m(ms::constants::mapping::roi::xMax),
-      minX_m(ms::constants::mapping::roi::xMin),
-      maxY_m(ms::constants::mapping::roi::yMax),
-      minY_m(ms::constants::mapping::roi::yMin),
-      maxZ_m(ms::constants::mapping::roi::zMax),
-      minZ_m(ms::constants::mapping::roi::zMin),
+              constants::mapping::roi::altitude,
+              std::min(constants::mapping::roi::width,
+                       constants::mapping::roi::height))),
+      maxX_m(constants::mapping::roi::xMax),
+      minX_m(constants::mapping::roi::xMin),
+      maxY_m(constants::mapping::roi::yMax),
+      minY_m(constants::mapping::roi::yMin),
+      maxZ_m(constants::mapping::roi::zMax),
+      minZ_m(constants::mapping::roi::zMin),
       mapInitValue(TValue(0.5)),
       debug(0),
       doTest(0),
@@ -820,7 +827,7 @@ void Mapserver<TMapstack, TData, TValue, TChild>::mapRefreshAndStorage(
     ROS_ERROR("Clear the map");
     for (std::map<std::string, mrpt::maps::COccupancyGridMap2D*>::iterator it =
         mapStack->begin(); it != mapStack->end(); ++it) {
-      it->second->fill(fillValue);
+      it->second->fill(mrpt::maps::COccupancyGridMap2D::l2p(fillValue));
     }
   }
 
@@ -903,3 +910,27 @@ void Mapserver<TMapstack, TData, TValue, TChild>::getMapInitValue(
   }
 }
 
+
+template<typename TMapstack, typename TData, typename TValue, typename TChild>
+std::shared_ptr<cv::Mat> Mapserver<TMapstack, TData, TValue, TChild>::rosOccToGrayScale(
+    nav_msgs::OccupancyGrid::ConstPtr map) {
+
+  std::shared_ptr<cv::Mat> dst;
+
+  if (map) {
+    if (map->info.width > 0 && map->info.height > 0) {
+      dst = std::shared_ptr<cv::Mat>(
+          new cv::Mat(map->info.height, map->info.width, CV_8UC1));
+//      dst->setTo(cv::Scalar(127,127,127)); // to set all values to 127 (aka unknown)
+      for (int idx = 0; idx < map->data.size(); ++idx) {
+        const int oggValue = int(map->data.at(idx));
+        const int intensity = oggValue < 0 ? 50 : oggValue;
+        dst->at<uchar>(idx) = uchar(float(intensity) * 2.55);
+      }
+    }
+  }
+
+//  DEBUG_MSG("Server returns map")
+//   cv::flip(*dst, *dst, 0);  // horizontal flip
+  return dst;
+}

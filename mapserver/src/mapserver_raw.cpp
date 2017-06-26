@@ -4,13 +4,13 @@
 #include <algorithm>
 #include <Eigen/Dense>
 #include <utils.h>
-#include <Constants.h>
+#include <Constants.hpp>
 #include <mutex>
 #include <thread>
 #include <fstream>
-using namespace ms::constants;
-using namespace ms::constants::mappingLayers;
-namespace msNumeric = ms::constants::numeric;
+using namespace constants;
+using namespace constants::mappingLayers;
+namespace numerics = constants::numeric;
 std::mutex mtxSwap, mtxShowRpc;
 
 
@@ -62,7 +62,7 @@ static cv::RotatedRect rect;
 
 // Translate a map
 template <typename T>
-void translateMap(cv::Mat &src, cv::Mat &dst, double offsetx = 0, double offsety = 0, T fillValue = msNumeric::invalidValue_int16) {
+void translateMap(cv::Mat &src, cv::Mat &dst, double offsetx = 0, double offsety = 0, T fillValue = numerics::invalidValue_int16) {
 
   // Define a transformation for the image
   const cv::Mat trans_mat = (cv::Mat_<double>(2,3) << 1, 0, offsetx, 0, 1, offsety);
@@ -101,7 +101,7 @@ void mapRefreshAndStorage(std::shared_ptr<std::vector<cv::Mat>> mapStack,
                           const bool storeMapStack,
                           const bool shiftMapStack,
                           const bool clearMapStack,
-                          T fillValue = msNumeric::invalidValue_int16) {
+                          T fillValue = numerics::invalidValue_int16) {
 
   // The message from the last time the function was called (So it is the location of the center)
   static tf::StampedTransform transformRoiInWorldLast;
@@ -287,7 +287,7 @@ void getStatistic(const std::vector<cv::Mat> &src, cv::Mat &dst, const statistic
     for (std::size_t idxMap = 0; idxMap < src.size(); ++idxMap) {
       for (int idxTile = 0; idxTile < src.at(idxMap).rows * src.at(idxMap).cols; ++idxTile) {
         const int16_t currentVal = src.at(idxMap).at<int16_t>(idxTile);
-        if (currentVal != msNumeric::invalidValue_int16) {
+        if (currentVal != numerics::invalidValue_int16) {
           dstTmp.at<int32_t>(idxTile) += pow(int32_t(currentVal) - int32_t(mean.at<int16_t>(idxTile)), 2);
           ++validCounter.at<int32_t>(idxTile);
         }
@@ -297,7 +297,7 @@ void getStatistic(const std::vector<cv::Mat> &src, cv::Mat &dst, const statistic
     for (std::size_t idxMap = 0; idxMap < src.size(); ++idxMap) {
       for (int idxTile = 0; idxTile < src.at(idxMap).rows * src.at(idxMap).cols; ++idxTile) {
         const int16_t currentVal = src.at(idxMap).at<int16_t>(idxTile);
-        if (currentVal != msNumeric::invalidValue_int16) {
+        if (currentVal != numerics::invalidValue_int16) {
           dstTmp.at<int32_t>(idxTile) += int32_t(currentVal);
           ++validCounter.at<int32_t>(idxTile);
         }
@@ -310,7 +310,7 @@ void getStatistic(const std::vector<cv::Mat> &src, cv::Mat &dst, const statistic
     if (validCounter.at<int32_t>(idxTile) != 0) {
       dstTmp.at<int32_t>(idxTile) /= validCounter.at<int32_t>(idxTile);
     } else {
-      dstTmp.at<int32_t>(idxTile) = msNumeric::invalidValue_int32;
+      dstTmp.at<int32_t>(idxTile) = numerics::invalidValue_int32;
     }
   }
 
@@ -378,7 +378,7 @@ cv::Mat getStatisticView(const std::shared_ptr<std::vector<cv::Mat>> mapStack, c
   tf::Matrix3x3 m(transformedViewInRoi.getRotation());
   double roll, pitch, yaw;
   m.getRPY(roll, pitch, yaw);
-  Eigen::Matrix4d roi_machineRoi = machine::tf::trans<double>(transformedViewInRoi.getOrigin().getX(), transformedViewInRoi.getOrigin().getY(), 0.0) * machine::tf::rotZ<double>(yaw);
+  Eigen::Matrix4d roi_machineRoi = ctf::trans<double>(transformedViewInRoi.getOrigin().getX(), transformedViewInRoi.getOrigin().getY(), 0.0) * ctf::rotZ<double>(yaw);
   // Cut the image
   cv::Mat dst;
   rect = utils::cutView(mapStackStatistic, dst, resolution_meterPerTile /*m/px*/ , xView/*x*/, yView/*y*/, wView/*w*/, dView/*d*/, zRotView /*rotZ*/, roi_machineRoi /*roi odometry*/, mapStackStatistic.type());
@@ -595,7 +595,7 @@ void tfTileNameHandler(const std_msgs::String nameMsg) {
                           !dontStoreMaps,
                           bool(shiftMap),
                           clearMap,
-                          msNumeric::invalidValue_int16);
+                          numerics::invalidValue_int16);
     mapRefreshAndStorage( lastPulsewidth_ps,                     // Map to shift/store/reset
                           currentPulsewidth_ps,                  // The result of the shifted map
                           transformRoiInWorld,                   // Transform
@@ -606,7 +606,7 @@ void tfTileNameHandler(const std_msgs::String nameMsg) {
                           !dontStoreMaps,                        // Info if maps should be stored
                           bool(shiftMap),                        // Info if maps should be shifted
                           clearMap,                              // If map is not shifted, reset the content of mapStack
-                          msNumeric::invalidValue_int16);     // Fill-up value
+                          numerics::invalidValue_int16);     // Fill-up value
     mapRefreshAndStorage( lastMapIterator,                       // Map to shift/store/reset
                           currentMapIterator,                    // The result of the shifted map
                           transformRoiInWorld,                   // Transform
@@ -718,7 +718,7 @@ int main(int argc, char **argv)
 
   {
     // Initiate the data for the maps
-    cv::Mat mapInit(mapSizeX_tiles, mapSizeX_tiles, CV_16SC1, cv::Scalar_<int16_t>(msNumeric::invalidValue_int16));
+    cv::Mat mapInit(mapSizeX_tiles, mapSizeX_tiles, CV_16SC1, cv::Scalar_<int16_t>(numerics::invalidValue_int16));
     cv::Mat iteratorInit(mapSizeX_tiles, mapSizeX_tiles, CV_8UC1, cv::Scalar_<uint8_t>(0));
 
     // Allocate memory for the maps

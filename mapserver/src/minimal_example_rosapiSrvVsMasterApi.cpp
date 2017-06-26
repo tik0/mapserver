@@ -63,11 +63,11 @@ tf::TransformListener *listenerTf;
 #include <boost/program_options.hpp>
 #include <boost/shared_ptr.hpp>
 
-#include <Constants.h>
+#include <Constants.hpp>
 #include <utils.h>
 using namespace claas::constants;
 using namespace claas::constants::mappingLayers;
-namespace claasNumeric = claas::constants::numeric;
+namespace numerics = constants::numeric;
 
 // Concatenated map scopes with the correct prefix, which is set by program options
 static std::string mapScopes[mappingLayers::NUM_MAPS];
@@ -523,7 +523,7 @@ void tfTileNameHandler(const std_msgs::String nameMsg) {
 //                          !dontStoreMaps,
 //                          bool(shiftMap),
 //                          !shiftMap,
-//                          claasNumeric::invalidValue_int16);
+//                          numerics::invalidValue_int16);
   }
 
   mtxSwap.unlock();
