@@ -26,7 +26,6 @@
 #include <iostream>
 std::mutex mtxSwap, mtxShowRpc;
 
-
 // ROS
 #include <ros/ros.h>
 #include <ros/spinner.h>
@@ -74,38 +73,41 @@ namespace claasNumeric = claas::constants::numeric;
 static std::string mapScopes[mappingLayers::NUM_MAPS];
 
 // Program options
-  // Properties of a single occupancy grid map
-  static std::string currentTileTfName(""), lastTileTfName("");
-  static std::string topicMap, topicLaser, tileOriginTfPrefix, currentTfNameTopic, worldLink;
-  static double idleStartupTime_s;
-  static float resolution = mapping::discreteResolution;
-  static float maxOccupancyUpdateCertainty = mapping::ogm::maxOccupancyUpdateCertainty;
-  static float maxDistanceInsertion = std::min(mapping::roi::width, mapping::roi::height);
-  static float max_x = mapping::roi::xMax;
-  static float min_x = mapping::roi::xMin;
-  static float max_y = mapping::roi::yMax;
-  static float min_y = mapping::roi::yMin;
-  static int debug = 0;
-  static int doTest = 0;
-  static float rate = 1;
-  static std::string ismScopePrefix = scopes::map::super::ogm;
-  static std::string machineModelScope = scopes::odometry;
-  // Marging for non present information: 0.45 .. 0.55 -> 0.1
-  static float uncertaintyBoundary = mapping::ogm::minDrawOccupancyUpdateCertainty;
-  static float mapInitValue = mapping::ogm::unknownOccupancyUpdateCertainty;
+// Properties of a single occupancy grid map
+static std::string currentTileTfName(""), lastTileTfName("");
+static std::string topicMap, topicLaser, tileOriginTfPrefix, currentTfNameTopic,
+    worldLink;
+static double idleStartupTime_s;
+static float resolution = mapping::discreteResolution;
+static float maxOccupancyUpdateCertainty =
+    mapping::ogm::maxOccupancyUpdateCertainty;
+static float maxDistanceInsertion = std::min(mapping::roi::width,
+                                             mapping::roi::height);
+static float max_x = mapping::roi::xMax;
+static float min_x = mapping::roi::xMin;
+static float max_y = mapping::roi::yMax;
+static float min_y = mapping::roi::yMin;
+static int debug = 0;
+static int doTest = 0;
+static float rate = 1;
+static std::string ismScopePrefix = scopes::map::super::ogm;
+static std::string machineModelScope = scopes::odometry;
+// Marging for non present information: 0.45 .. 0.55 -> 0.1
+static float uncertaintyBoundary = mapping::ogm::minDrawOccupancyUpdateCertainty;
+static float mapInitValue = mapping::ogm::unknownOccupancyUpdateCertainty;
 
 // Global variables
-  // The map stack
-  static std::vector<mrpt::maps::COccupancyGridMap2D> mapStack;  // Current stack for fusion
-  static std::vector<mrpt::maps::COccupancyGridMap2D> mapStackStorageTemp;  // Temp stack for hdd storage
-  static std::vector<mrpt::maps::COccupancyGridMap2D> mapStackShiftTemp; // Temp stack for shifting
-  static mrpt::maps::COccupancyGridMap2D::TMapDefinition def;
-  // Discrete resolution of the map
-  static int mapSizeX;
-  static int mapSizeY;
-  static cv::Mat storageMapBuffer;
-  static std::string mapStorageLocation = mapping::ogm::mapStorageLocation;
-  static int shiftMap = 1; // Shift (true) or clean (false) the map if center_dresch is received
+// The map stack
+static std::vector<mrpt::maps::COccupancyGridMap2D> mapStack;  // Current stack for fusion
+static std::vector<mrpt::maps::COccupancyGridMap2D> mapStackStorageTemp;  // Temp stack for hdd storage
+static std::vector<mrpt::maps::COccupancyGridMap2D> mapStackShiftTemp;  // Temp stack for shifting
+static mrpt::maps::COccupancyGridMap2D::TMapDefinition def;
+// Discrete resolution of the map
+static int mapSizeX;
+static int mapSizeY;
+static cv::Mat storageMapBuffer;
+static std::string mapStorageLocation = mapping::ogm::mapStorageLocation;
+static int shiftMap = 1;  // Shift (true) or clean (false) the map if center_dresch is received
 
 // For sending the localization
 // rsb::Informer<rst::geometry::PoseEuler>::Ptr informerOdometry;
@@ -120,35 +122,48 @@ std::mutex mapRefresh;
 std::mutex mtxOdom;       // mutex for odometry messages
 
 // Set all map tiles of all maps to the given value
-void fillMapStack(std::vector<mrpt::maps::COccupancyGridMap2D> &mapStack, float value = mapping::ogm::unknownOccupancyUpdateCertainty) {
+void fillMapStack(std::vector<mrpt::maps::COccupancyGridMap2D> &mapStack,
+                  float value = mapping::ogm::unknownOccupancyUpdateCertainty) {
   for (uint idx = 0; idx < mapStack.size(); ++idx) {
-    mapStack[idx].fill (value);  // Fill every map with uncertainty
+    mapStack[idx].fill(value);  // Fill every map with uncertainty
   }
 }
 
 // Translate a map
-void translateMap(mrpt::maps::COccupancyGridMap2D &map, int offsetx = 0, int offsety = 0, float fillProbability = mapping::ogm::unknownOccupancyUpdateCertainty) {
+void translateMap(mrpt::maps::COccupancyGridMap2D &map, int offsetx = 0,
+                  int offsety = 0, float fillProbability =
+                      mapping::ogm::unknownOccupancyUpdateCertainty) {
 
   // Define a tranformation for the image
-  cv::Mat trans_mat = (cv::Mat_<double>(2,3) << 1, 0, static_cast<double>(offsetx), 0, 1, static_cast<double>(offsety));
+  cv::Mat trans_mat =
+      (cv::Mat_<double>(2, 3) << 1, 0, static_cast<double>(offsetx), 0, 1, static_cast<double>(offsety));
 
   // Get the raw data as an image
   cv::Mat mapAsImage(static_cast<int>(map.getSizeY()),
                      static_cast<int>(map.getSizeX()),
-                     CV_8SC1, (void*)&map.getRawMap()[0]);
+                     CV_8SC1,
+                     (void*) &map.getRawMap()[0]);
 
   // Warp the image (which refers to the map)
-  cv::warpAffine(mapAsImage,mapAsImage,trans_mat,
-                 cv::Size(static_cast<int>(map.getSizeX()), static_cast<int>(map.getSizeY())),
-                 cv::INTER_NEAREST,
-                 cv::BORDER_CONSTANT,
-                 cv::Scalar(static_cast<double>(mrpt::maps::COccupancyGridMap2D::p2l(fillProbability))));
+  cv::warpAffine(
+      mapAsImage,
+      mapAsImage,
+      trans_mat,
+      cv::Size(static_cast<int>(map.getSizeX()),
+               static_cast<int>(map.getSizeY())),
+      cv::INTER_NEAREST,
+      cv::BORDER_CONSTANT,
+      cv::Scalar(
+          static_cast<double>(mrpt::maps::COccupancyGridMap2D::p2l(
+              fillProbability))));
 }
 
 // Translate a stack of maps
-void translateMapStack(std::vector<mrpt::maps::COccupancyGridMap2D> &mapStack, int offsetx = 0, int offsety = 0, float fillProbability = mapping::ogm::unknownOccupancyUpdateCertainty) {
+void translateMapStack(std::vector<mrpt::maps::COccupancyGridMap2D> &mapStack,
+                       int offsetx = 0, int offsety = 0, float fillProbability =
+                           mapping::ogm::unknownOccupancyUpdateCertainty) {
   for (std::size_t mapIdx = 0; mapIdx < NUM_MAPS; ++mapIdx) {
-    translateMap(mapStack[mapIdx], offsetx, offsety , fillProbability);
+    translateMap(mapStack[mapIdx], offsetx, offsety, fillProbability);
   }
 }
 
@@ -158,16 +173,19 @@ boost::shared_ptr<cv::Mat> doColorMapCallback() {
   // TODO Define this as a global variable so that it dows not
   // have to allocate space on every call
   boost::shared_ptr<cv::Mat> dst(new cv::Mat(mapSizeX, mapSizeY, CV_8UC3));
-  dst->setTo(cv::Scalar(127,127,127)); // to set all values to 127 (aka unknown)
+  dst->setTo(cv::Scalar(127, 127, 127));  // to set all values to 127 (aka unknown)
 
   const float validCellValue = uncertaintyBoundary;
   for (uint mapIdx = 0; mapIdx < NUM_MAPS; ++mapIdx) {
     for (int idy = 0; idy < mapSizeY; ++idy) {
       for (int idx = 0; idx < mapSizeX; ++idx) {
         if (mapStack[mapIdx].getCell(idx, idy) > validCellValue) {
-          dst->at<cv::Vec3b>(idy,idx)[0] = mappingLayers::mapColorBGR[mapIdx][0];
-          dst->at<cv::Vec3b>(idy,idx)[1] = mappingLayers::mapColorBGR[mapIdx][1];
-          dst->at<cv::Vec3b>(idy,idx)[2] = mappingLayers::mapColorBGR[mapIdx][2];
+          dst->at<cv::Vec3b>(idy, idx)[0] =
+              mappingLayers::mapColorBGR[mapIdx][0];
+          dst->at<cv::Vec3b>(idy, idx)[1] =
+              mappingLayers::mapColorBGR[mapIdx][1];
+          dst->at<cv::Vec3b>(idy, idx)[2] =
+              mappingLayers::mapColorBGR[mapIdx][2];
         }
       }
     }
@@ -176,7 +194,8 @@ boost::shared_ptr<cv::Mat> doColorMapCallback() {
 //  DEBUG_MSG("Server returns map")
 //   cv::flip(*dst, *dst, 0);  // horizontal flip
   return dst;
-};
+}
+;
 
 //// TODO I need the location of the ROI in the global coordinate system to sore it as a filename
 //void mapRefreshAndStorage(rst::claas::MachineModel_Odemetrie machinaModel, rst::claas::MachineModel_Odemetrie lastMachineModelWithCenterRoi, uint64_t timestamp) {
@@ -265,12 +284,12 @@ boost::shared_ptr<cv::Mat> doColorMapCallback() {
 //  std::cerr << event.getConnectionHeader().size() << std::endl;
 //}
 
-
 // Get topic name with callback: http://answers.ros.org/question/68434/get-topic-name-in-callback/?answer=68545#post-id-68545
 // Using bind function: http://en.cppreference.com/w/cpp/utility/functional/bind
-void doIsmFusion(const std_msgs::String::ConstPtr &msg, const std::string &topic) {
-  std::cerr << "Content: "  <<  *msg  << std::endl;
-  std::cerr << "Topic:   "  <<  topic << std::endl;
+void doIsmFusion(const std_msgs::String::ConstPtr &msg,
+                 const std::string &topic) {
+  std::cerr << "Content: " << *msg << std::endl;
+  std::cerr << "Topic:   " << topic << std::endl;
 }
 
 //// RSB Server function for the mapping server which replies with a compressed image map of the environment
@@ -282,7 +301,6 @@ void doIsmFusion(const std_msgs::String::ConstPtr &msg, const std::string &topic
 //    return doColorMapCallback();
 //  }
 //};
-
 
 //// Unpack the requested layer to a single OGM and return it
 //boost::shared_ptr<rst::navigation::OccupancyGrid2DInt> doOgmSingleLayerCallback(std::string requestedLayerName) {
@@ -333,10 +351,11 @@ void doIsmFusion(const std_msgs::String::ConstPtr &msg, const std::string &topic
 //  return requestedLayer;
 //}
 
+nav_msgs::OccupancyGrid getIsmOutput(
+    const mapserver_msgs::mapPrimitive &view,
+    const mrpt::maps::COccupancyGridMap2D &input) {
 
-nav_msgs::OccupancyGrid getIsmOutput(const mapserver_msgs::mapPrimitive &view, const mrpt::maps::COccupancyGridMap2D &input) {
-
-  cv::Mat statisticMat , croppedMat; /*float matrices*/
+  cv::Mat statisticMat, croppedMat; /*float matrices*/
   nav_msgs::OccupancyGrid output;
 
   std::stringstream os;
@@ -344,12 +363,13 @@ nav_msgs::OccupancyGrid getIsmOutput(const mapserver_msgs::mapPrimitive &view, c
   ROS_INFO("view:\n%s\n", os.str().c_str());
 
   // Calculate the requested ROI
-  const double xView = view.pose.pose.position.x; // Meter
-  const double yView = view.pose.pose.position.y; // Meter
-  const double wView = view.width * view.resolution; // Tiles * meter/tiles
-  const double hView = view.height * view.resolution; // Tiles * meter/tiles
-  const double dView = view.depth * view.resolution; // Tiles * meter/tiles
-  const std::string sourceframe = view.frame_id.empty() ? machine::frames::names::BASE_LINK : view.frame_id;
+  const double xView = view.pose.pose.position.x;  // Meter
+  const double yView = view.pose.pose.position.y;  // Meter
+  const double wView = view.width * view.resolution;  // Tiles * meter/tiles
+  const double hView = view.height * view.resolution;  // Tiles * meter/tiles
+  const double dView = view.depth * view.resolution;  // Tiles * meter/tiles
+  const std::string sourceframe =
+      view.frame_id.empty() ? machine::frames::names::BASE_LINK : view.frame_id;
   tf::Quaternion q;
   tf::quaternionMsgToTF(view.pose.pose.orientation, q);
   tf::Matrix3x3 m(q);
@@ -357,16 +377,15 @@ nav_msgs::OccupancyGrid getIsmOutput(const mapserver_msgs::mapPrimitive &view, c
   m.getRPY(roll, pitch, yaw);
   const double zRotView = yaw;
 
-
   // Resize the resolution
   cv::Size size(view.width, view.depth);
-  cv::resize(statisticMat,croppedMat,size,0,0,cv::INTER_NEAREST);
+  cv::resize(statisticMat, croppedMat, size, 0, 0, cv::INTER_NEAREST);
 
   // Copy the meta information
   output.header.stamp = ros::Time::now();
   output.header.frame_id = sourceframe;
   output.info.resolution = view.resolution;
-  output.info.width  = croppedMat.cols;
+  output.info.width = croppedMat.cols;
   output.info.height = croppedMat.rows;
   output.info.origin = view.pose.pose;
   const int arraySize = croppedMat.cols * croppedMat.rows;
@@ -389,7 +408,6 @@ nav_msgs::OccupancyGrid getIsmOutput(const mapserver_msgs::mapPrimitive &view, c
 //        return output;
 //    }
 //};
-
 
 // RSB Server function for the mapping server which replies with a OGM map of the environment
 // TODO Add view.proto
@@ -415,10 +433,11 @@ void testFillMap() {
   def.min_y = 0.0f;
 
   // Create the map from definition
-  mrpt::maps::COccupancyGridMap2D sensorUpdate = *mrpt::maps::COccupancyGridMap2D::CreateFromMapDefinition(def);
+  mrpt::maps::COccupancyGridMap2D sensorUpdate =
+      *mrpt::maps::COccupancyGridMap2D::CreateFromMapDefinition(def);
 
   // Fill it with some occupied value
-  sensorUpdate.fill (0.8);
+  sensorUpdate.fill(0.8);
 
   // Update a sensor scan:
   // The transformation already points to the lower left edge of the sensor scan
@@ -426,18 +445,21 @@ void testFillMap() {
   const float transY = 5.0f;
 
   int mapOffsetXStart = transX / def.resolution;
-  int mapOffsetXEnd   = (transX + def.max_x - def.min_x) / def.resolution;
+  int mapOffsetXEnd = (transX + def.max_x - def.min_x) / def.resolution;
   int mapOffsetYStart = transY / def.resolution;
-  int mapOffsetYEnd   = (transY + def.max_y - def.min_y) / def.resolution;
+  int mapOffsetYEnd = (transY + def.max_y - def.min_y) / def.resolution;
 
   // Iterate through every map layer
-  for (uint mapIdx = 0; mapIdx < NUM_MAPS ; ++mapIdx) {
+  for (uint mapIdx = 0; mapIdx < NUM_MAPS; ++mapIdx) {
     // Do a pointwise sensor fusion for every layer
     int mapOffsetXStart = transX / def.resolution * (1 + mapIdx);
-    int mapOffsetXEnd   = (transX + def.max_x - def.min_x) / def.resolution * (1 + mapIdx);
-    for (int idy = mapOffsetYStart; idy < mapOffsetYEnd ; ++idy) {
-      for (int idx = mapOffsetXStart; idx < mapOffsetXEnd ; ++idx) {
-        mapStack[mapIdx].updateCell(idx,idy,sensorUpdate.getCell(idx-mapOffsetXStart, idy-mapOffsetYStart));
+    int mapOffsetXEnd = (transX + def.max_x - def.min_x) / def.resolution
+        * (1 + mapIdx);
+    for (int idy = mapOffsetYStart; idy < mapOffsetYEnd; ++idy) {
+      for (int idx = mapOffsetXStart; idx < mapOffsetXEnd; ++idx) {
+        mapStack[mapIdx].updateCell(
+            idx, idy,
+            sensorUpdate.getCell(idx - mapOffsetXStart, idy - mapOffsetYStart));
       }
     }
   }
@@ -451,25 +473,27 @@ void tfTileNameHandler(const std_msgs::String nameMsg) {
   bool currentTileTfNameChange = false;
   mtxSwap.lock();
   if ((nameMsg.data.back() != currentTileTfName.back())) {
-      if (currentTileTfName.empty()) {
-          // First round, we bootstrap
-          currentTileTfName = nameMsg.data;
-      } else {
+    if (currentTileTfName.empty()) {
+      // First round, we bootstrap
+      currentTileTfName = nameMsg.data;
+    } else {
 //        std::swap(currentMapHeight_mm, lastMapHeight_mm);
 //        std::swap(currentPulsewidth_ps, lastPulsewidth_ps);
 //        std::swap(currentMapIterator, lastMapIterator);
-        lastTileTfName    = currentTileTfName;
-        currentTileTfName = nameMsg.data;
-        currentTileTfNameChange = true;
-      }
+      lastTileTfName = currentTileTfName;
+      currentTileTfName = nameMsg.data;
+      currentTileTfNameChange = true;
+    }
   }
 
   if (currentTileTfNameChange) {
     tf::StampedTransform transformRoiInWorld;
     try {
-      listenerTf->waitForTransform(lastTileTfName, worldLink, ros::Time(0.0), ros::Duration(3.0));
-      listenerTf->lookupTransform(lastTileTfName, worldLink, ros::Time(0.0), transformRoiInWorld);
-    } catch(const std::exception &exc) {
+      listenerTf->waitForTransform(lastTileTfName, worldLink, ros::Time(0.0),
+                                   ros::Duration(3.0));
+      listenerTf->lookupTransform(lastTileTfName, worldLink, ros::Time(0.0),
+                                  transformRoiInWorld);
+    } catch (const std::exception &exc) {
       const std::string excStr(exc.what());
       ROS_ERROR("tfTileNameHandler: %s", excStr.c_str());
       mtxSwap.unlock();
@@ -479,7 +503,7 @@ void tfTileNameHandler(const std_msgs::String nameMsg) {
 
     // Wait until all references are gone
     std::size_t lockCnt = 0;
-    const std::size_t lockCntMax = 200000; // 2 seconds if we sleep for 10 us
+    const std::size_t lockCntMax = 200000;  // 2 seconds if we sleep for 10 us
 //    while(!(lastMapHeight_mm.unique() && currentPulsewidth_ps.unique() && currentMapIterator.unique())) {
 //        usleep(10);
 //        if (++lockCnt > lockCntMax) {
@@ -509,60 +533,65 @@ void tfTileNameHandler(const std_msgs::String nameMsg) {
 void listTopics(const rosgraph_msgs::Log::ConstPtr &msg) {
   std::stringstream ss;
   ss << *msg;
-  ROS_INFO("\n%s\n",
-           ss.str().c_str());
+  ROS_INFO("\n%s\n", ss.str().c_str());
 }
 
-
-int main(int argc, char **argv){
+int main(int argc, char **argv) {
 
   // ROS
   ros::init(argc, argv, "mapserver_stat");
   ros::NodeHandle n("~");
 
-  n.param<std::string>("tile_origin_tf_prefix", tileOriginTfPrefix, "map_base_link_");
-  n.param<std::string>("current_tf_name_topic", currentTfNameTopic, "/currentTfTile");
+  n.param<std::string>("tile_origin_tf_prefix", tileOriginTfPrefix,
+                       "map_base_link_");
+  n.param<std::string>("current_tf_name_topic", currentTfNameTopic,
+                       "/currentTfTile");
   n.param<std::string>("world_link", worldLink, "odom");
-  n.param<double>("idle_startup_time", idleStartupTime_s, -1.0); // Wait before mapping (< 0 to disable)
+  n.param<double>("idle_startup_time", idleStartupTime_s, -1.0);  // Wait before mapping (< 0 to disable)
 
-  n.param<int>("debug", debug, 0); // Enable debug outputs
-  n.param<int>("test", doTest, 0); // Enable testing
-  n.param<float>("resolution", resolution, mapping::discreteResolution); // Resolution of map in meter/cell
-  n.param<float>("max_occupanc_update_certainty", maxOccupancyUpdateCertainty, 0); // Maximum update uncertainty
-  n.param<float>("max_distance_insertion", maxDistanceInsertion, 0); // Maximum distance insertion
-  n.param<float>("max_x", max_x, mapping::roi::xMax); // Maxmium value of x in meter
-  n.param<float>("min_x", min_x, mapping::roi::xMin); // Minimum value of x in meter
-  n.param<float>("max_y", max_y, mapping::roi::yMax); // Maxmium value of y in meter
-  n.param<float>("min_y", min_y, mapping::roi::yMin); // Minimum value of y in meter
-  n.param<float>("uncertainty_boundary", uncertaintyBoundary, 0); // Uncertainty boundary for displaying a feature (standard: 0.5 (unknown))
-  n.param<float>("mapInit_value", mapInitValue, 0); // Probability (0 .. 1.0) for initializing the map
-  n.param<std::string>("machine_model_topic", machineModelScope, ""); // Scope for receiving the machine models (odometry)
-  n.param<std::string>("ism_scope_prefix", ismScopePrefix, ""); // Scope prefix for the inverse sensor models
-  n.param<std::string>("map_storage_location", mapStorageLocation, "/tmp"); // Location for the maps to store (preceeding / is needed, like /tmp/)
-  n.param<int>("shift_map", shiftMap, 0); // Shift (1) or wipe (0) the map on center_dresch
-  n.param<float>("rate", rate, 1); // Rate for publishing debug information
+  n.param<int>("debug", debug, 0);  // Enable debug outputs
+  n.param<int>("test", doTest, 0);  // Enable testing
+  n.param<float>("resolution", resolution, mapping::discreteResolution);  // Resolution of map in meter/cell
+  n.param<float>("max_occupanc_update_certainty", maxOccupancyUpdateCertainty,
+                 0);  // Maximum update uncertainty
+  n.param<float>("max_distance_insertion", maxDistanceInsertion, 0);  // Maximum distance insertion
+  n.param<float>("max_x", max_x, mapping::roi::xMax);  // Maxmium value of x in meter
+  n.param<float>("min_x", min_x, mapping::roi::xMin);  // Minimum value of x in meter
+  n.param<float>("max_y", max_y, mapping::roi::yMax);  // Maxmium value of y in meter
+  n.param<float>("min_y", min_y, mapping::roi::yMin);  // Minimum value of y in meter
+  n.param<float>("uncertainty_boundary", uncertaintyBoundary, 0);  // Uncertainty boundary for displaying a feature (standard: 0.5 (unknown))
+  n.param<float>("mapInit_value", mapInitValue, 0);  // Probability (0 .. 1.0) for initializing the map
+  n.param<std::string>("machine_model_topic", machineModelScope, "");  // Scope for receiving the machine models (odometry)
+  n.param<std::string>("ism_scope_prefix", ismScopePrefix, "");  // Scope prefix for the inverse sensor models
+  n.param<std::string>("map_storage_location", mapStorageLocation, "/tmp");  // Location for the maps to store (preceeding / is needed, like /tmp/)
+  n.param<int>("shift_map", shiftMap, 0);  // Shift (1) or wipe (0) the map on center_dresch
+  n.param<float>("rate", rate, 1);  // Rate for publishing debug information
 
-  INFO_MSG("Enable debug outputs: "            << debug                        )
-  INFO_MSG("Enable testing: "                  << doTest                       )
-  INFO_MSG("Resolution of map in meter/cell: " << resolution                   )
-  INFO_MSG("Maximum update uncertainty: "      << maxOccupancyUpdateCertainty  )
-  INFO_MSG("Maximum distance insertion: "      << maxDistanceInsertion         )
-  INFO_MSG("Maxmium value of x in meter: "     << max_x                        )
-  INFO_MSG("Minimum value of x in meter: "     << min_x                        )
-  INFO_MSG("Maxmium value of y in meter: "     << max_y                        )
-  INFO_MSG("Minimum value of y in meter: "     << min_y                        )
-  INFO_MSG("Uncertainty boundary for displaying a feature (standard: 0.5 (unknown)): "     << uncertaintyBoundary)
+  INFO_MSG("Enable debug outputs: " << debug)
+  INFO_MSG("Enable testing: " << doTest)
+  INFO_MSG("Resolution of map in meter/cell: " << resolution)
+  INFO_MSG("Maximum update uncertainty: " << maxOccupancyUpdateCertainty)
+  INFO_MSG("Maximum distance insertion: " << maxDistanceInsertion)
+  INFO_MSG("Maxmium value of x in meter: " << max_x)
+  INFO_MSG("Minimum value of x in meter: " << min_x)
+  INFO_MSG("Maxmium value of y in meter: " << max_y)
+  INFO_MSG("Minimum value of y in meter: " << min_y)
+  INFO_MSG(
+      "Uncertainty boundary for displaying a feature (standard: 0.5 (unknown)): "
+          << uncertaintyBoundary)
   INFO_MSG("Probability (0 .. 1.0) for initializing the map: " << mapInitValue)
   if (mapInitValue > uncertaintyBoundary)
-    WARNING_MSG("'uncertaintyBoundary' is less than 'mapInitValue', display might be corrupted")
-  INFO_MSG("Scope for receiving the machine models (odometry): " << machineModelScope    )
-  INFO_MSG("Scope prefix for the inverse sensor models: " << ismScopePrefix    )
+  WARNING_MSG(
+      "'uncertaintyBoundary' is less than 'mapInitValue', display might be corrupted")
+  INFO_MSG(
+      "Scope for receiving the machine models (odometry): "
+          << machineModelScope)
+  INFO_MSG("Scope prefix for the inverse sensor models: " << ismScopePrefix)
   for (uint idx = 0; idx < NUM_MAPS; ++idx) {
     mapScopes[idx] = std::string(ismScopePrefix).append(mapSubScopes[idx]);
     INFO_MSG("Scope for " << mapSubScopes[idx] << ": " << mapScopes[idx])
   }
   INFO_MSG("Location for the maps to store: " << mapStorageLocation)
-
 
   // Define the properties of one occupancy map
   def.resolution = resolution;
@@ -590,25 +619,26 @@ int main(int argc, char **argv){
 //  fillMapStack(mapStackStorageTemp, mapInitValue);
 //  fillMapStack(mapStackShiftTemp, mapInitValue);
 
-
   if (doTest) {
-    INFO_MSG("Test the mapstructure by printing rectangulars in every layer an printing them")
+    INFO_MSG(
+        "Test the mapstructure by printing rectangulars in every layer an printing them")
     // Fill all the maps with small rectangles which are overlapping a bit
     testFillMap();
     // Get the map as image
     boost::shared_ptr<cv::Mat> image(doColorMapCallback());
-    imshow( "Display window", *image );                  // Show our image inside it.
-    cv::waitKey(0);                                      // Wait for a keystroke in the window
+    imshow("Display window", *image);               // Show our image inside it.
+    cv::waitKey(0);                        // Wait for a keystroke in the window
     INFO_MSG("Exit")
     return 0;
   }
 
   // Prepare subscriber for all future OGM
 //  subscriberIsm = n.subscribe<nav_msgs::OccupancyGrid>("TOPIC", 100, doIsmFusion);
-  subscriberIsm = n.subscribe<std_msgs::String>("/processed", 100, std::bind(doIsmFusion, std::placeholders::_1, "processed"));
+  subscriberIsm = n.subscribe<std_msgs::String>(
+      "/processed", 100,
+      std::bind(doIsmFusion, std::placeholders::_1, "processed"));
 //  ros::Subscriber subscriberLog = n.subscribe<rosgraph_msgs::Log>("/rosout_agg", 100, listTopics);
 //  subscriberTfTileName = n.subscribe<std_msgs::String>(currentTfNameTopic, 2, tfTileNameHandler);
-
 
   // Prepare ROS service
   // TODO: Do this on demand for given subscribed topics
@@ -617,18 +647,18 @@ int main(int argc, char **argv){
 //  ros::ServiceServer service_singleLayerOgm = n.advertiseService(scopes::map::ogmServer::parent + s + scopes::map::ogmServer::requests::stockEdge , mapServerStockEdge);
 //  ros::ServiceServer service_singleLayerOgm = n.advertiseService(scopes::map::ogmServer::parent + s + scopes::map::ogmServer::requests::singleLayerOgm , mapServerSingleLayerOgm);
 
-
   ros::AsyncSpinner spinner(5);
   spinner.start();
   // Do stuff periodically
   ros::Rate _rate(rate);
-  ros::ServiceClient topicfinder = n.serviceClient<rosapi::Topics>("rosapi/topics");
-  while(ros::ok()) {
-      // Plot map
+  ros::ServiceClient topicfinder = n.serviceClient<rosapi::Topics>(
+      "rosapi/topics");
+  while (ros::ok()) {
+    // Plot map
 //      boost::shared_ptr<cv::Mat> image(doColorMapCallback());
 //      cv::imshow( "Current View", *image );                    // Show our image inside it.
 //      cv::waitKey(1); // Update the window
-      // Print topics
+    // Print topics
 //      std::cerr << "TEST" << endl;
 //      ros::master::V_TopicInfo topics;
 //      if (ros::master::getTopics(topics)) {
@@ -643,14 +673,14 @@ int main(int argc, char **argv){
 //      } else {
 //        ROS_ERROR("No topics listable");
 //      }
-      // From http://answers.ros.org/question/108176/how-to-list-all-topicsservices-that-are-known-by-the-server-with-roscpp/?answer=109931#post-id-109931
-      rosapi::Topics topicsrv;
-      topicfinder.call(topicsrv);
-      ROS_INFO("SRV: responsesize: %d", int(topicsrv.response.topics.size()));
-      for (int idx = 0; idx < topicsrv.response.topics.size(); ++idx) {
-          ROS_INFO("Topics: %s", topicsrv.response.topics.at(idx).c_str());
-      }
-      _rate.sleep();
+    // From http://answers.ros.org/question/108176/how-to-list-all-topicsservices-that-are-known-by-the-server-with-roscpp/?answer=109931#post-id-109931
+    rosapi::Topics topicsrv;
+    topicfinder.call(topicsrv);
+    ROS_INFO("SRV: responsesize: %d", int(topicsrv.response.topics.size()));
+    for (int idx = 0; idx < topicsrv.response.topics.size(); ++idx) {
+      ROS_INFO("Topics: %s", topicsrv.response.topics.at(idx).c_str());
+    }
+    _rate.sleep();
   }
 
   delete listenerTf;
