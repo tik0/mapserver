@@ -166,6 +166,14 @@ class Mapserver {
 
 
   ///
+  /// \brief Fetches the map initialization value from the parameter server
+  /// \param paramName parameter name of the init. value
+  /// \param mapInitValue Pointer to the value to fill
+  /// \param n The node handle
+  ///
+  static void getMapInitValue(const std::string paramName, TValue &mapInitValue, ros::NodeHandle *n);
+
+  ///
   /// \brief Store the current tf tile name and swap the storage
   /// \param nameMsg Name of the current tile tf
   ///
@@ -417,6 +425,7 @@ Mapserver<TMapstack, TData, TValue, TChild>::tfTileNameHandler(const std_msgs::S
 
 template<typename TMapstack, typename TData, typename TValue, typename TChild>
 void Mapserver<TMapstack, TData, TValue, TChild>::tupleHandler(const mapserver_msgs::pnsTuple msg) {
+  ROS_ERROR("----------------- THIS IS SUBSCRIBPTION EXEC");
   bool currentTileTfNameChange = false;
   static mapserver_msgs::pnsTuple lastPnsTuple;
   mapRefresh.lock();
@@ -555,7 +564,7 @@ Mapserver<TMapstack, TData, TValue, TChild>::Mapserver(ros::NodeHandle *nh, TChi
         mapStorageLocation(ms::constants::mapping::ogm::mapStorageLocation),
         dontStoreMaps(0),
         shiftMap(1),
-        topicPrefix("/"),
+        topicPrefix("/ism"),
         tileOriginTfPrefix("map_base_link_"),
         tileOriginTfSufixForRoiOrigin(ms::constants::machine::frames::names::ROI_ORIGIN),
         currentTfNameTopic("/currentTfTile"),
@@ -573,7 +582,7 @@ Mapserver<TMapstack, TData, TValue, TChild>::Mapserver(ros::NodeHandle *nh, TChi
         minY_m(ms::constants::mapping::roi::yMin),
         maxZ_m(ms::constants::mapping::roi::zMax),
         minZ_m(ms::constants::mapping::roi::zMin),
-        mapInitValue(0.5),
+        mapInitValue(TValue(0.5)),
         debug(0),
         doTest(0),
         rate(1.0),
@@ -581,35 +590,35 @@ Mapserver<TMapstack, TData, TValue, TChild>::Mapserver(ros::NodeHandle *nh, TChi
         storageNameFormat(""),
         storageNameUnit("") {
 
-//  n.param<std::string>("topic_prefix", this->topicPrefix, scopes::map::super::ogm);
-  n->param<std::string>("topic_prefix", this->topicPrefix, std::string("/ism"));
-
-  n->param<std::string>("tile_origin_tf_prefix", this->tileOriginTfPrefix);
-  n->param<std::string>("tile_origin_tf_sufix_for_roi_origin", this->tileOriginTfSufixForRoiOrigin);
-  n->param<std::string>("current_tf_name_topic", this->currentTfNameTopic);
-  n->param<std::string>("current_tuple_topic", this->currentTupleTopic);
-  n->param<std::string>("world_link", this->worldLink);
-  n->param<std::string>("store_maps_topic", this->storeMapsTopic);
-  n->param<std::string>("req_topic_map_stack", this->reqTopicMapStack);
-  n->param<double>("idle_startup_time", this->idleStartupTime_s);
-  n->param<int>("debug", this->debug);
-  n->param<int>("test", this->doTest);
-  n->param<double>("resolution", this->resolution_mPerTile);
-  n->param<float>("max_distance_insertion", this->maxDistanceInsertion);
-  n->param<float>("max_x_m", this->maxX_m);
-  n->param<float>("min_x_m", this->minX_m);
-  n->param<float>("max_y_m", this->maxY_m);
-  n->param<float>("min_y_m", this->minY_m);
-  n->param<float>("max_z_m", this->maxZ_m);
-  n->param<float>("min_z_m", this->minZ_m);
-  n->param<double>("mapInit_value", this->mapInitValue);
-  n->param<std::string>("map_storage_location", this->mapStorageLocation);
-  n->param<int>("shift_map", this->shiftMap);
-  n->param<int>("dont_store_maps", this->dontStoreMaps);
-  n->param<float>("rate", this->rate);
-  n->param<std::string>("storage_map_name", this->storageNameMapKind);
-  n->param<std::string>("storage_format_name", this->storageNameFormat);
-  n->param<std::string>("storage_unit_name", this->storageNameUnit);
+  n->getParam("topic_prefix", this->topicPrefix);
+  n->getParam("tile_origin_tf_prefix", this->tileOriginTfPrefix);
+  n->getParam("tile_origin_tf_sufix_for_roi_origin", this->tileOriginTfSufixForRoiOrigin);
+  n->getParam("current_tf_name_topic", this->currentTfNameTopic);
+  n->getParam("current_tuple_topic", this->currentTupleTopic);
+  n->getParam("current_tuple_topic", this->currentTupleTopic);
+  ROS_ERROR_STREAM("2 Tuble topic " << this->currentTupleTopic);
+  n->getParam("world_link", this->worldLink);
+  n->getParam("store_maps_topic", this->storeMapsTopic);
+  n->getParam("req_topic_map_stack", this->reqTopicMapStack);
+  n->getParam("idle_startup_time", this->idleStartupTime_s);
+  n->getParam("debug", this->debug);
+  n->getParam("test", this->doTest);
+  n->getParam("resolution", this->resolution_mPerTile);
+  n->getParam("max_distance_insertion", this->maxDistanceInsertion);
+  n->getParam("max_x_m", this->maxX_m);
+  n->getParam("min_x_m", this->minX_m);
+  n->getParam("max_y_m", this->maxY_m);
+  n->getParam("min_y_m", this->minY_m);
+  n->getParam("max_z_m", this->maxZ_m);
+  n->getParam("min_z_m", this->minZ_m);
+  Mapserver::getMapInitValue(std::string("mapInit_value"), this->mapInitValue, n);
+  n->getParam("map_storage_location", this->mapStorageLocation);
+  n->getParam("shift_map", this->shiftMap);
+  n->getParam("dont_store_maps", this->dontStoreMaps);
+  n->getParam("rate", this->rate);
+  n->getParam("storage_map_name", this->storageNameMapKind);
+  n->getParam("storage_format_name", this->storageNameFormat);
+  n->getParam("storage_unit_name", this->storageNameUnit);
 
 
   mapInitValueApplied = TValue(mapInitValue);
@@ -626,6 +635,7 @@ Mapserver<TMapstack, TData, TValue, TChild>::Mapserver(ros::NodeHandle *nh, TChi
       this->subscriberTfTileName = n->subscribe(currentTfNameTopic, 2, &Mapserver::tfTileNameHandler, this);
   } else {
 //      subscriberTuple = Mapserver::n.subscribe<mapserver_msgs::pnsTuple>(currentTupleTopic, 2, &Mapserver::tupleHandler, this);
+    ROS_ERROR("----------------- THIS IS SUBSCRIBPTION");
       this->subscriberTuple = n->subscribe(currentTupleTopic, 2, &Mapserver::tupleHandler, this);
   }
 
@@ -831,5 +841,38 @@ Mapserver<TMapstack, TData, TValue, TChild>::translateMapStack(const std::shared
   }
 }
 
-
+template<typename TMapstack, typename TData, typename TValue, typename TChild>
+void
+Mapserver<TMapstack, TData, TValue, TChild>::getMapInitValue(const std::string paramName, TValue &mapInitValue, ros::NodeHandle *n) {
+  if (std::is_same<TValue, bool>::value) {
+    bool mapInit_value;
+    n->getParam("mapInit_value", mapInit_value);
+    mapInitValue = TValue(mapInit_value);
+  } else if (std::is_same<TValue, double>::value) {
+    double mapInit_value;
+    n->getParam("mapInit_value", mapInit_value);
+    mapInitValue = TValue(mapInit_value);
+  } else if (std::is_same<TValue, float>::value) {
+    float mapInit_value;
+    n->getParam("mapInit_value", mapInit_value);
+    mapInitValue = TValue(mapInit_value);
+  } else if (std::is_same<TValue, int>::value) {
+    int mapInit_value;
+    n->getParam("mapInit_value", mapInit_value);
+    mapInitValue = TValue(mapInit_value);
+  } else if (std::is_same<TValue, short>::value) {
+    int mapInit_value;
+    n->getParam("mapInit_value", mapInit_value);
+    ROS_ASSERT(mapInit_value < std::numeric_limits<short>::lowest() || mapInit_value > std::numeric_limits<short>::max());
+    mapInitValue = short(mapInit_value);
+  } else if (std::is_same<TValue, char>::value) {
+    int mapInit_value;
+    n->getParam("mapInit_value", mapInit_value);
+    ROS_ASSERT(mapInit_value < std::numeric_limits<char>::lowest() || mapInit_value > std::numeric_limits<char>::max());
+    mapInitValue = char(mapInit_value);
+  } else {
+    ROS_ERROR("No known conversion for TValue in mapserver");
+    ROS_BREAK();
+  }
+}
 

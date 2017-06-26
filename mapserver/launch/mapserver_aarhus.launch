@@ -26,6 +26,7 @@
     <param name="bounding_box_height" value="$(eval arg('roi_height') / 3)" />
     <param name="bounding_box_altitude" value="$(eval arg('roi_altitude') / 3)" />
     <param name="tf_publish_rate" value="50" />
+    <param name="current_tuple_topic" value="/currentTuple" />
     <!-- tf_name_publish_delay is one of the most crucial parameters. It is the difference in seconds between sending
     the new tf tree and the reference name to it. The delay means, that all listening process get some time to build
     up their tf tree for the new map tile, because their might be sensor messages which are delayed due to processing.
@@ -56,7 +57,7 @@
 <?undefined
   <!--launch-prefix="gdb -ex run --args"-->
 ?>
-  <node pkg="mapserver" name="mapserver_stat" type="mapserver_stat" respawn="true" output="screen">
+  <node pkg="mapserver" name="mapserver_stat" type="mapserver_stat_node" respawn="true" output="screen">
     <param name="tile_origin_tf_prefix" type="string" value="map_base_link_" />
     <param name="tile_origin_tf_sufix_for_roi_origin" type="string" value="_ROI_ORIGIN" />
     <param name="current_tf_name_topic" type="string" value="/currentTfTile" />
