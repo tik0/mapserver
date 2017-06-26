@@ -53,78 +53,6 @@ std::shared_ptr<cv::Mat> MapserverStat::mrptOggToGrayScale(
   return dst;
 }
 
-///
-/// \brief Returns the pose in the desired frame
-/// \param poseInSourceFrame Stamped pose in the source frame
-/// \param targetFrame The target frame in which the returned pose will reside
-/// \param tfListener A transformer
-/// \return Transformed pose. Shared pointer is empty if an error occurs
-///
-std::shared_ptr<tf::Stamped<tf::Pose>> MapserverStat::getPoseInFrame(
-    const tf::Stamped<tf::Pose> &poseInSourceFrame,
-    const std::string &targetFrame, const tf::TransformListener &tfListener) {
-
-  std::shared_ptr<tf::Stamped<tf::Pose>> poseInTargetFrameReturn;
-  tf::Stamped<tf::Pose> poseInTargetFrame;
-  // Use source frame as target frame if empty
-  const bool useSrcFrameAsDstFrame =
-      targetFrame.empty() || !targetFrame.compare(poseInSourceFrame.frame_id_) ?
-          true : false;
-  const std::string srcFrame = poseInSourceFrame.frame_id_;
-  const std::string dstFrame = useSrcFrameAsDstFrame ? srcFrame : targetFrame;
-  // Get the origin of the pose in the target frame
-  bool tfSuccess = true;
-  if (!useSrcFrameAsDstFrame) {  // We don't need this, if we stay in the same frame
-    try {
-      // HACK We don't wait for tf messages in the past, because they will never arrive at all
-      std::string errorMsg;
-      const std::string errorMsgWorthitToWaitFor(
-          "Lookup would require extrapolation into the future");
-      tfListener.canTransform(dstFrame, srcFrame, poseInSourceFrame.stamp_,
-                              &errorMsg);
-      std::size_t found = errorMsg.find(errorMsgWorthitToWaitFor);
-      if (found != std::string::npos || errorMsg.empty()) {
-        if (found != std::string::npos) {
-          ROS_DEBUG_STREAM(
-              "getPoseInFrame: We'll wait for tf transform messages in the future: " << errorMsg);
-          tfListener.waitForTransform(dstFrame, srcFrame,
-                                      poseInSourceFrame.stamp_,
-                                      ros::Duration(3.0));
-        }
-        tfListener.transformPose(dstFrame, poseInSourceFrame,
-                                 poseInTargetFrame);
-      } else {
-        throw std::runtime_error(errorMsg);
-      }
-    } catch (const std::exception &exc) {
-      const std::string excStr(exc.what());
-      ROS_ERROR("getPoseInFrame (%s -> %s): %s", srcFrame.c_str(),
-                dstFrame.c_str(), excStr.c_str());
-      tfSuccess = false;
-    }
-  } else {
-    poseInTargetFrame = poseInSourceFrame;
-  }
-
-  // Return a filled shared pointer if tf was successful
-  if (tfSuccess) {
-    poseInTargetFrameReturn = std::make_shared<tf::Stamped<tf::Pose>>(
-        poseInTargetFrame);
-  }
-  return poseInTargetFrameReturn;
-}
-
-///
-/// \brief Calculate the metric coordinates of OGM cell centroids in the target frame
-/// \param ogm The OGM which cell coordinates are converted to points
-/// \param targetFrame The target frame in which the the point is calculated (target frame equals OGM frame if empty)
-/// \param tfListener A transformer
-/// \param idxStart Start index in width
-/// \param idyStart Start index in height
-/// \param idxWidth Amount of cells in x direction
-/// \param idyHeight Amount of cells in y direction
-/// \return Vector of points in row major order. Shared pointer is empty if an error occurs
-///
 std::shared_ptr<std::vector<tf::Point>> MapserverStat::ogmCellCoordinatesToPoints(
     const nav_msgs::OccupancyGrid::ConstPtr ogm, const std::string &targetFrame,
     const tf::TransformListener &tfListener, const std::size_t &idxStart,
@@ -144,7 +72,7 @@ std::shared_ptr<std::vector<tf::Point>> MapserverStat::ogmCellCoordinatesToPoint
     tf::Pose ogmOriginPose;
     tf::poseMsgToTF(ogm->info.origin, ogmOriginPose);
     std::shared_ptr<tf::Stamped<tf::Pose>> ogmOriginInTargetFrame =
-        getPoseInFrame(
+        Mapserver::getPoseInFrame(
             tf::Stamped<tf::Pose>(ogmOriginPose, ogm->header.stamp,
                                   ogm->header.frame_id),
             targetFrame, tfListener);
@@ -176,17 +104,6 @@ std::shared_ptr<std::vector<tf::Point>> MapserverStat::ogmCellCoordinatesToPoint
   return points;
 }
 
-///
-/// \brief Converts a OGM to a point cloud Calculate the metric coordinates of OGM cell centroids in the target frame
-/// \param ogm The OGM which cell coordinates are converted to points
-/// \param targetFrame The target frame in which the point is calculated (target frame equals OGM frame if empty)
-/// \param tfListener A transformer
-/// \param idxStart Start index in width
-/// \param idyStart Start index in height
-/// \param idxWidth Amount of cells in x direction
-/// \param idyHeight Amount of cells in y direction
-/// \return OGM as point cloud. The OGM range [-1, 0 .. 100] is converted to [-0.01f, 0 .. 1.0f]. If message pointer is empty, an error occurred
-///
 sensor_msgs::PointCloud::Ptr MapserverStat::ogmCellsToPointCloud(
     const nav_msgs::OccupancyGrid::ConstPtr ogm, const std::string &targetFrame,
     const tf::TransformListener &tfListener, const std::size_t &idxStart,
@@ -238,13 +155,6 @@ void MapserverStat::correctInvalidOrientation(tf::Pose &pose) {
   }
 }
 
-///
-/// \brief Returns the coordinates of the four corner points of the OGM in the given frame
-/// \param ogm The OGM which cell coordinates are converted to points
-/// \param targetFrame The target frame in which the point is calculated (target frame equals OGM frame if empty)
-/// \param tfListener A transformer
-/// \return Vector of points starting top-left. Shared pointer is empty if an error occurs
-///
 std::shared_ptr<std::vector<tf::Point>> MapserverStat::getOgmCornerPoints(
     const nav_msgs::OccupancyGrid::ConstPtr ogm, const std::string &targetFrame,
     const tf::TransformListener &tfListener) {
@@ -259,7 +169,7 @@ std::shared_ptr<std::vector<tf::Point>> MapserverStat::getOgmCornerPoints(
     tf::poseMsgToTF(ogm->info.origin, ogmOriginPose);
     correctInvalidOrientation(ogmOriginPose);
     std::shared_ptr<tf::Stamped<tf::Pose>> ogmOriginInTargetFrame =
-        getPoseInFrame(
+        Mapserver::getPoseInFrame(
             tf::Stamped<tf::Pose>(ogmOriginPose, ogm->header.stamp,
                                   ogm->header.frame_id),
             targetFrame, tfListener);
@@ -284,20 +194,13 @@ std::shared_ptr<std::vector<tf::Point>> MapserverStat::getOgmCornerPoints(
   return points;
 }
 
-///
-/// \brief Returns the coordinates of the four corner points of the OGM in the given pose
-/// \param ogm The OGM which cell coordinates are converted to points
-/// \param targetPose The target Pose in which the point is calculated
-/// \param tfListener A transformer
-/// \return Vector of points starting top-left. Shared pointer is empty if an error occurs
-///
 std::shared_ptr<std::vector<tf::Point>> MapserverStat::getOgmCornerPoints(
     const nav_msgs::OccupancyGrid::ConstPtr ogm,
     const tf::Stamped<tf::Pose> &targetPose,
     const tf::TransformListener &tfListener) {
   std::shared_ptr<std::vector<tf::Point>> points;
   // Get pose of the OGM in the target frame
-  std::shared_ptr<tf::Stamped<tf::Pose>> targetPoseInOgmFrame = getPoseInFrame(
+  std::shared_ptr<tf::Stamped<tf::Pose>> targetPoseInOgmFrame = Mapserver::getPoseInFrame(
       targetPose, ogm->header.frame_id, tfListener);
   if (targetPoseInOgmFrame) {
     // First get the corner points in own frame
@@ -312,12 +215,6 @@ std::shared_ptr<std::vector<tf::Point>> MapserverStat::getOgmCornerPoints(
   return points;
 }
 
-///
-/// \brief Resize a OGM to the desired resolution
-/// \param ogm The OGM which should be resized
-/// \param targetResolution The target resolution of the OGM
-/// \return Resized OGM
-///
 nav_msgs::OccupancyGrid::ConstPtr MapserverStat::ogmResize(
     const nav_msgs::OccupancyGrid::ConstPtr ogm,
     const float &targetResolution) {
@@ -347,15 +244,6 @@ nav_msgs::OccupancyGrid::ConstPtr MapserverStat::ogmResize(
   return ogmTf;
 }
 
-///
-/// \brief Warps a OGM to the desired pose and resolution such that the new OGM is aligned with this pose
-/// \param ogm The OGM which should be transformed
-/// \param targetPose The target pose in which the new OGM resides
-/// \param targetResolution The target resolution of the OGM
-/// \param tfListener A transformer
-/// \param resetPoseToOgmBoundary The origin of the new OGM will not reside in targetOrigin, but with respect to the minimum possible size of the which pose lies in the XY-plane of targetOrigin.
-/// \return OGM in the new frame. If message pointer is empty, an error occurred
-///
 nav_msgs::OccupancyGrid::ConstPtr MapserverStat::ogmTf(
     const nav_msgs::OccupancyGrid::ConstPtr ogm,
     const tf::Stamped<tf::Pose> &targetOrigin, const float &targetResolution,
@@ -634,18 +522,6 @@ nav_msgs::OccupancyGrid::Ptr MapserverStat::oggTf(
 
 }
 
-//void setMask () {
-//
-//}
-//
-//bool cellNotInMask(int idx, int idy) {
-//
-//}
-
-// Get topic name with callback: http://answers.ros.org/question/68434/get-topic-name-in-callback/?answer=68545#post-id-68545
-// Using bind function: http://en.cppreference.com/w/cpp/utility/functional/bind
-//static std::shared_ptr<std::map<std::string, mrpt::maps::COccupancyGridMap2D*>> currentMapStack;
-//static std::shared_ptr<std::map<std::string, mrpt::maps::COccupancyGridMap2D*>> lastMapStack;
 void MapserverStat::doIsmFusion(const nav_msgs::OccupancyGrid::ConstPtr &msg,
                                 const std::string &topic) {
 

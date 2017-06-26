@@ -293,10 +293,22 @@ class Mapserver {
 
   ///
   /// \brief Converts and occupancy grid map to a grayscale image in open cv
-  /// \param map The occupnacy grid map
-  /// \return Shared point on image. Pointer is zero, if image allocation fails
+  /// \param map The occupancy grid map
+  /// \return Shared pointer on image. Pointer is zero, if image allocation fails
   ///
   static std::shared_ptr<cv::Mat> rosOccToGrayScale(nav_msgs::OccupancyGrid::ConstPtr map);
+
+
+  ///
+  /// \brief Transforms pose into target frame
+  /// \param poseInSourceFrame The pose to transform
+  /// \param targetFrame Target frame of the frame
+  /// \param tfListener A listener for transformation
+  /// \return Shared pointer on transformed pose
+  ///
+  static std::shared_ptr<tf::Stamped<tf::Pose>> getPoseInFrame(
+      const tf::Stamped<tf::Pose> &poseInSourceFrame,
+      const std::string &targetFrame, const tf::TransformListener &tfListener);
 
   ///
   /// \brief Translates a mapstack and fills up the boarders
@@ -933,4 +945,60 @@ std::shared_ptr<cv::Mat> Mapserver<TMapstack, TData, TValue, TChild>::rosOccToGr
 //  DEBUG_MSG("Server returns map")
 //   cv::flip(*dst, *dst, 0);  // horizontal flip
   return dst;
+}
+
+
+template<typename TMapstack, typename TData, typename TValue, typename TChild>
+std::shared_ptr<tf::Stamped<tf::Pose>> Mapserver<TMapstack, TData, TValue, TChild>::getPoseInFrame(
+    const tf::Stamped<tf::Pose> &poseInSourceFrame,
+    const std::string &targetFrame, const tf::TransformListener &tfListener) {
+
+  std::shared_ptr<tf::Stamped<tf::Pose>> poseInTargetFrameReturn;
+  tf::Stamped<tf::Pose> poseInTargetFrame;
+  // Use source frame as target frame if empty
+  const bool useSrcFrameAsDstFrame =
+      targetFrame.empty() || !targetFrame.compare(poseInSourceFrame.frame_id_) ?
+          true : false;
+  const std::string srcFrame = poseInSourceFrame.frame_id_;
+  const std::string dstFrame = useSrcFrameAsDstFrame ? srcFrame : targetFrame;
+  // Get the origin of the pose in the target frame
+  bool tfSuccess = true;
+  if (!useSrcFrameAsDstFrame) {  // We don't need this, if we stay in the same frame
+    try {
+      // HACK We don't wait for tf messages in the past, because they will never arrive at all
+      std::string errorMsg;
+      const std::string errorMsgWorthitToWaitFor(
+          "Lookup would require extrapolation into the future");
+      tfListener.canTransform(dstFrame, srcFrame, poseInSourceFrame.stamp_,
+                              &errorMsg);
+      std::size_t found = errorMsg.find(errorMsgWorthitToWaitFor);
+      if (found != std::string::npos || errorMsg.empty()) {
+        if (found != std::string::npos) {
+          ROS_DEBUG_STREAM(
+              "getPoseInFrame: We'll wait for tf transform messages in the future: " << errorMsg);
+          tfListener.waitForTransform(dstFrame, srcFrame,
+                                      poseInSourceFrame.stamp_,
+                                      ros::Duration(3.0));
+        }
+        tfListener.transformPose(dstFrame, poseInSourceFrame,
+                                 poseInTargetFrame);
+      } else {
+        throw std::runtime_error(errorMsg);
+      }
+    } catch (const std::exception &exc) {
+      const std::string excStr(exc.what());
+      ROS_ERROR("getPoseInFrame (%s -> %s): %s", srcFrame.c_str(),
+                dstFrame.c_str(), excStr.c_str());
+      tfSuccess = false;
+    }
+  } else {
+    poseInTargetFrame = poseInSourceFrame;
+  }
+
+  // Return a filled shared pointer if tf was successful
+  if (tfSuccess) {
+    poseInTargetFrameReturn = std::make_shared<tf::Stamped<tf::Pose>>(
+        poseInTargetFrame);
+  }
+  return poseInTargetFrameReturn;
 }

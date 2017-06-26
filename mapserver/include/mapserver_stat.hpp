@@ -195,6 +195,10 @@ class MapserverStat : private Mapserver<mrpt::maps::COccupancyGridMap2D,
       const std::string &targetFrame,
       const nav_msgs::OccupancyGrid::ConstPtr ismRos, const double targetRes =
           -1/*meter/tile*/);
+
+
+  // Get topic name with callback: http://answers.ros.org/question/68434/get-topic-name-in-callback/?answer=68545#post-id-68545
+  // Using bind function: http://en.cppreference.com/w/cpp/utility/functional/bind
   void doIsmFusion(const nav_msgs::OccupancyGrid::ConstPtr &msg,
                    const std::string &topic);
   nav_msgs::OccupancyGrid getIsmOutput(
