@@ -1104,7 +1104,7 @@ bool MapserverStat::mapStatServerMapStack(
 }
 
 MapserverStat::MapserverStat(ros::NodeHandle& nh)
-    : Mapserver(&nh, this),
+    : Mapserver(&nh),
       n(nh) {
 
   this->n.param<std::string>("debug_ism_topic", debugIsmTopic,
@@ -1177,11 +1177,11 @@ void MapserverStat::spinOnce() {
                debugTopic.c_str());
     }
     // Publish the maps
-    //        std::vector<std::string> foo;
-    //        tf::Vector3 trans = tf::Vector3(tfScalar(-(max_x - min_x)/2.0f), tfScalar(-(max_y - min_y)/2.0f), tfScalar(0.0f));
-    //        std::shared_ptr<tf::Pose> poseOffset = std::shared_ptr<tf::Pose>(new tf::Pose(tf::Quaternion(0,0,0,1), trans));
-    //        std::string reference = currentTileTfName + tileOriginTfSufixForRoiOrigin;
-    //        formatAndSendGrid(foo, reference, currentMapStack, n, topicDebugGridPrefix);
+    std::vector<std::string> foo;
+    tf::Vector3 trans = tf::Vector3(tfScalar(-(maxX_m - minX_m)/2.0f), tfScalar(-(maxY_m - minY_m)/2.0f), tfScalar(0.0f));
+    std::shared_ptr<tf::Pose> poseOffset = std::shared_ptr<tf::Pose>(new tf::Pose(tf::Quaternion(0,0,0,1), trans));
+    std::string reference = currentTileTfName + tileOriginTfSufixForRoiOrigin;
+    formatAndSendGrid(foo, reference, currentMapStack, n, topicDebugGridPrefix);
   }
 
   //      showRpc();
@@ -1196,10 +1196,56 @@ void MapserverStat::spin() {
   spinner.start();
   // Do stuff periodically
   ros::Rate _rate(rate);
-  ROS_ERROR("Mapserver starts spinning");
+  ROS_INFO("Mapserver starts spinning");
   while (ros::ok()) {
     this->spinOnce();
     _rate.sleep();
   }
+}
+
+// Translate a map
+void MapserverStat::translateMap(
+    mrpt::maps::COccupancyGridMap2D &map, int offsetx, int offsety,
+    mrpt::maps::COccupancyGridMap2D::cellType fillProbability_logodds) {
+
+  // Define a transformation for the image
+  cv::Mat trans_mat =
+      (cv::Mat_<double>(2, 3) << 1, 0, static_cast<double>(offsetx), 0, 1, static_cast<double>(offsety));
+
+  // Get the raw data as an image
+  cv::Mat mapAsImage(static_cast<int>(map.getSizeY()),
+                     static_cast<int>(map.getSizeX()),
+#if defined(OCCUPANCY_GRIDMAP_CELL_SIZE_8BITS)
+                     CV_8SC1
+#else // defined(OCCUPANCY_GRIDMAP_CELL_SIZE_16BITS)
+                     CV_16SC1
+#endif
+                     ,
+                     (void*) &map.getRawMap()[0]);
+
+  // Warp the image (which refers to the map)
+  cv::warpAffine(
+      mapAsImage,
+      mapAsImage,
+      trans_mat,
+      cv::Size(static_cast<int>(map.getSizeX()),
+               static_cast<int>(map.getSizeY())),
+      cv::INTER_NEAREST, cv::BORDER_CONSTANT,
+      cv::Scalar(static_cast<double>(fillProbability_logodds)));
+}
+
+// Set all map tiles of all maps to the given value
+void MapserverStat::fillMapStack(
+    std::vector<mrpt::maps::COccupancyGridMap2D> &mapStack,
+    mrpt::maps::COccupancyGridMap2D::cellType fillValue) {
+  for (auto idx = mapStack.begin(); idx < mapStack.end(); ++idx) {
+    idx->fill(mrpt::maps::COccupancyGridMap2D::l2p(fillValue));
+  }
+}
+
+// Set all map tiles of all maps to the given value
+void MapserverStat::fillMapStack(
+    std::vector<mrpt::maps::COccupancyGridMap2D> &mapStack, float fillValue) {
+  fillMapStack(mapStack, mrpt::maps::COccupancyGridMap2D::p2l(fillValue));
 }
 

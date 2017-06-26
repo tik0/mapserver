@@ -51,6 +51,19 @@ namespace msNumeric = ms::constants::numeric;
 class MapserverStat : private Mapserver<mrpt::maps::COccupancyGridMap2D,
     nav_msgs::OccupancyGrid, mrpt::maps::COccupancyGridMap2D::cellType,
     MapserverStat> {
+  //  std::string topicMap;
+  //  std::string topicLaser;
+//  // Marging for non present information: 0.45 .. 0.55 -> 0.1
+
+//  //!
+
+//  // Global variables
+//    // The map stack
+//    cv::Mat storageMapBuffer;
+//    std::vector<mrpt::maps::COccupancyGridMap2D> mapStack;  // Current stack for fusion
+//    std::vector<mrpt::maps::COccupancyGridMap2D> mapStackStorageTemp;  // Temp stack for hdd storage
+//    std::vector<mrpt::maps::COccupancyGridMap2D> mapStackShiftTemp; // Temp stack for shifting
+//    mrpt::maps::COccupancyGridMap2D::TMapDefinition def;
 
  public:
   mrpt::maps::COccupancyGridMap2D::TMapDefinition def;
@@ -202,5 +215,35 @@ class MapserverStat : private Mapserver<mrpt::maps::COccupancyGridMap2D,
                              mapserver::ismStackFloat::Response &res);
   void spinOnce();
   void spin();
+
+  // Translate a map
+  virtual void translateMap(
+      mrpt::maps::COccupancyGridMap2D &map,
+      int offsetx = 0,
+      int offsety = 0,
+      mrpt::maps::COccupancyGridMap2D::cellType fillProbability_logodds =
+          mrpt::maps::COccupancyGridMap2D::p2l(
+              mapping::ogm::unknownOccupancyUpdateCertainty));
+
+  ///
+  /// \brief Set all map tiles of all maps to the given value
+  /// \param mapStack The mapstack to reset
+  /// \param fillValue Probability fill-up value in loggodds
+  ///
+  virtual void fillMapStack(
+      std::vector<mrpt::maps::COccupancyGridMap2D> &mapStack,
+      mrpt::maps::COccupancyGridMap2D::cellType fillValue =
+          mrpt::maps::COccupancyGridMap2D::cellType(
+              mapping::ogm::unknownOccupancyUpdateCertainty));
+
+  ///
+  /// \brief Set all map tiles of all maps to the given value
+  /// \param mapStack The mapstack to reset
+  /// \param fillValue Probability fill-up value
+  ///
+  // Set all map tiles of all maps to the given value
+  void fillMapStack(std::vector<mrpt::maps::COccupancyGridMap2D> &mapStack,
+                    float fillValue =
+                        mapping::ogm::unknownOccupancyUpdateCertainty);
 
 };
