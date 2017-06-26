@@ -9,6 +9,10 @@
 #define OCCUPANCY_GRIDMAP_CELL_SIZE 2
 #endif
 
+
+#include "mapserver.hpp"
+
+
 // Stdandard libraries
 #include <mutex>          // std::mutex
 #include <future>
@@ -27,8 +31,7 @@ using namespace constants;
 using namespace constants::mappingLayers;
 namespace numerics = constants::numeric;
 
-// OpenCV
-#include <opencv2/opencv.hpp>
+
 
 // ROS
 #include <ros/ros.h>
@@ -45,60 +48,68 @@ namespace numerics = constants::numeric;
 #include <sensor_msgs/PointCloud2.h>
 #include <type_traits>
 
-#include "mapserver.hpp"
-
 #include <utils.h>
 
-class MapserverStat : private Mapserver<mrpt::maps::COccupancyGridMap2D,
+class MapserverStat : public Mapserver<mrpt::maps::COccupancyGridMap2D,
     nav_msgs::OccupancyGrid, mrpt::maps::COccupancyGridMap2D::cellType,
     MapserverStat> {
-  //  std::string topicMap;
-  //  std::string topicLaser;
-//  // Marging for non present information: 0.45 .. 0.55 -> 0.1
 
-//  //!
-
-//  // Global variables
-//    // The map stack
-//    cv::Mat storageMapBuffer;
-//    std::vector<mrpt::maps::COccupancyGridMap2D> mapStack;  // Current stack for fusion
-//    std::vector<mrpt::maps::COccupancyGridMap2D> mapStackStorageTemp;  // Temp stack for hdd storage
-//    std::vector<mrpt::maps::COccupancyGridMap2D> mapStackShiftTemp; // Temp stack for shifting
-//    mrpt::maps::COccupancyGridMap2D::TMapDefinition def;
-
- public:
-  mrpt::maps::COccupancyGridMap2D::TMapDefinition def;
  private:
+
+  //! Storage which shows the callback message as image for debug
+  nav_msgs::OccupancyGrid::ConstPtr msgDebug;
+  //! The node handle
   ros::NodeHandle n;
- public:
+  //! Definition of a map
+  mrpt::maps::COccupancyGridMap2D::TMapDefinition def;
+  //! Prefix for sending the debug messages
   std::string topicDebugGridPrefix;
+  //! Uncertainty boundary s.t. the offset around 0.5 which is interpreted as unknown
   float uncertaintyBoundary = mapping::ogm::minDrawOccupancyUpdateCertainty;
+  //! Maximum value to fuse with
   float maxOccupancyUpdateCertainty = mapping::ogm::maxOccupancyUpdateCertainty;
+  //! Topic for sending debug grid messages
   std::string debugTopic;
+  //! Topic for sending the transformed ISM
   std::string debugIsmTopic;
-
+  //! The mapstack service
   ros::ServiceServer service_mapStack;
-  ros::Publisher publisherIsmAsPointCloud, publisherIsmAsOgm;
-
-  MapserverStat(ros::NodeHandle& nh);
-  virtual ~MapserverStat() {
-  }
-
- protected:
-
- private:
-
-  // TODO Do we need this really?
-  nav_msgs::OccupancyGrid::ConstPtr msgTmp;
+  //! Publisher for sending the transformed ISM as occupancy grid message
+  ros::Publisher publisherIsmAsOgm;
+  //! Publisher for sending the transformed ISM as point cloud
+  ros::Publisher publisherIsmAsPointCloud;
 
  public:
-  // Add just some picture of each other
+
+  ///
+  /// \brief The constructor
+  /// \param nh The node handle
+  ///
+  MapserverStat(ros::NodeHandle& nh);
+
+  ///
+  /// \brief The destructor
+  ///
+  virtual ~MapserverStat() {
+  };
+
+  ///
+  /// \brief Converts the mapstack to a colored image
+  /// \param mapStack The mapstack to convert
+  /// \return Colored map as image
+  ///
   boost::shared_ptr<cv::Mat> doColorMapCallback(
       std::vector<mrpt::maps::COccupancyGridMap2D> mapStack);
+
+  ///
+  /// \brief converts MRPT occ map to grayscale image
+  /// \param map The map to convert
+  /// \return Shared pointer to the image. Is Null pointer if image conversion was unsuccessful
   std::shared_ptr<cv::Mat> mrptOggToGrayScale(
       mrpt::maps::COccupancyGridMap2D &map);
-  std::shared_ptr<cv::Mat> rosOggToGrayScale(
-      nav_msgs::OccupancyGrid::ConstPtr map);
+
+//  std::shared_ptr<cv::Mat> rosOggToGrayScale(
+//      nav_msgs::OccupancyGrid::ConstPtr map);
 
   ///
   /// \brief Returns the pose in the desired frame
@@ -143,7 +154,7 @@ class MapserverStat : private Mapserver<mrpt::maps::COccupancyGridMap2D,
       const std::string &targetFrame, const tf::TransformListener &tfListener,
       const std::size_t &idxStart, const std::size_t &idyStart,
       const std::size_t &idxWidth, const std::size_t &idyHeight);
-  void correctInvalidOrientation(tf::Pose &pose);
+
   ///
   /// \brief Returns the coordinates of the four corner points of the OGM in the given frame
   /// \param ogm The OGM which cell coordinates are converted to points
@@ -154,6 +165,7 @@ class MapserverStat : private Mapserver<mrpt::maps::COccupancyGridMap2D,
   std::shared_ptr<std::vector<tf::Point>> getOgmCornerPoints(
       const nav_msgs::OccupancyGrid::ConstPtr ogm,
       const std::string &targetFrame, const tf::TransformListener &tfListener);
+
   ///
   /// \brief Returns the coordinates of the four corner points of the OGM in the given pose
   /// \param ogm The OGM which cell coordinates are converted to points
@@ -165,6 +177,7 @@ class MapserverStat : private Mapserver<mrpt::maps::COccupancyGridMap2D,
       const nav_msgs::OccupancyGrid::ConstPtr ogm,
       const tf::Stamped<tf::Pose> &targetPose,
       const tf::TransformListener &tfListener);
+
   ///
   /// \brief Resize a OGM to the desired resolution
   /// \param ogm The OGM which should be resized
@@ -174,6 +187,7 @@ class MapserverStat : private Mapserver<mrpt::maps::COccupancyGridMap2D,
   nav_msgs::OccupancyGrid::ConstPtr ogmResize(
       const nav_msgs::OccupancyGrid::ConstPtr ogm,
       const float &targetResolution);
+
   ///
   /// \brief Warps a OGM to the desired pose and resolution such that the new OGM is aligned with this pose
   /// \param ogm The OGM which should be transformed
@@ -199,11 +213,27 @@ class MapserverStat : private Mapserver<mrpt::maps::COccupancyGridMap2D,
 
   // Get topic name with callback: http://answers.ros.org/question/68434/get-topic-name-in-callback/?answer=68545#post-id-68545
   // Using bind function: http://en.cppreference.com/w/cpp/utility/functional/bind
+  ///
+  /// \brief Receive an occupancy message and fuse it with the mapstack
+  /// \param msg The occupancy message
+  /// \param topic Topic name which is used as identifier for the mapstack to fuse the message
+  ///
   void doIsmFusion(const nav_msgs::OccupancyGrid::ConstPtr &msg,
                    const std::string &topic);
   nav_msgs::OccupancyGrid getIsmOutput(
       const mapserver_msgs::mapPrimitive &view,
       const mrpt::maps::COccupancyGridMap2D &input);
+
+
+  ///
+  /// \brief Send a list formated maps
+  /// \param list List of map identifiers to send
+  /// \param frame Frame id for the header
+  /// \param mapStack The mapstack wich is going to be formated
+  /// \param topicPrefixGrid Prefix to add to the grid
+  /// \param tfPose Extra pose for transformation
+  /// \param topicSuffixGrid Suffix for grid map message
+  ///
   void formatAndSendGrid(
       std::vector<std::string> &list,
       std::string &frame,
@@ -211,17 +241,40 @@ class MapserverStat : private Mapserver<mrpt::maps::COccupancyGridMap2D,
           std::map<std::string, mrpt::maps::COccupancyGridMap2D*>> mapStack,
       ros::NodeHandle &n, const std::string topicPrefixGrid = "",
       const std::shared_ptr<tf::Pose> tfPose = NULL,
-      std::string topicSufixGrid = "/grid", std::string topicSufixPointCloud =
-          "/pointCloud");
+      std::string topicSuffixGrid = "/grid");
+
+  ///
+  /// \brief Adds a map to a requested response
+  /// \param name Name of the map to add
+  /// \param map Pointer to the map
+  /// \param response The response to append
+  ///
   void addMapToResponse(const std::string &name,
                         mrpt::maps::COccupancyGridMap2D* map,
                         mapserver::ismStackFloat::Response &response);
+
+
+  ///
+  /// \brief Requesting the maps stack with float values
+  /// \param req The request
+  /// \param res The response
+  /// \return True if response was successful
+  ///
   bool mapStatServerMapStack(mapserver::ismStackFloat::Request &req,
                              mapserver::ismStackFloat::Response &res);
-  void spinOnce();
-  void spin();
 
-  // Translate a map
+  ///
+  /// \brief The spinning realization for this class
+  ///
+  virtual void spinOnce();
+
+  ///
+  /// \brief Translates the content of a map and fills up the boarders
+  /// \param map The map
+  /// \param offsetx Offset to move in X pixel direction
+  /// \param offsety Offset to move in Y pixel direction
+  /// \param fillProbability_logodds Fill-up value as probability in logodds
+  ///
   virtual void translateMap(
       mrpt::maps::COccupancyGridMap2D &map,
       int offsetx = 0,
@@ -246,7 +299,6 @@ class MapserverStat : private Mapserver<mrpt::maps::COccupancyGridMap2D,
   /// \param mapStack The mapstack to reset
   /// \param fillValue Probability fill-up value
   ///
-  // Set all map tiles of all maps to the given value
   void fillMapStack(std::vector<mrpt::maps::COccupancyGridMap2D> &mapStack,
                     float fillValue =
                         mapping::ogm::unknownOccupancyUpdateCertainty);

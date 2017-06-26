@@ -38,6 +38,9 @@
 #include <tf/transform_broadcaster.h>
 #include <ros/duration.h>
 
+// OpenCV
+#include <opencv2/opencv.hpp>
+
 template<typename TMapstack, typename TData, typename TValue, typename TChild>
 class Mapserver {
 
@@ -123,6 +126,8 @@ class Mapserver {
   double rate = 1;
   //! Derived from mapInitValue which is actually applied
   TValue mapInitValueApplied;
+  //! Number of spinners for asynchronous processing
+  int numSpinner = 5;
   //! Storage name: Kind of map
   std::string storageNameMapKind;
   //! Storage name: Format (empty: Take from type specifier)
@@ -222,6 +227,22 @@ class Mapserver {
   virtual inline bool mapRefreshAndStorageCondition();
 
   ///
+  /// \brief Called by spin() with specific period
+  ///
+  virtual void spinOnce() {};
+
+  ///
+  /// \brief Call to run the mapserver
+  ///
+  void spin();
+
+  ///
+  /// \brief Correct the quaternions of a pose if invalid
+  /// \param pose The pose to correct
+  ///
+  void correctInvalidOrientation(tf::Pose &pose);
+
+  ///
   /// \brief Shift/purge/stores the map stack to hard drive (stores binary to hard drive)
   /// \param mapStack Map to shift/store/reset
   /// \param mapStackShiftedResult The result of mapStack which is shift/store/reset
@@ -256,7 +277,6 @@ class Mapserver {
   /// \param offsety Offset to move in Y pixel direction
   /// \param fillValue Fill-up value
   ///
-  // Translate a map
   virtual void translateMap(TMapstack &map, int offsetx, int offsety,
                             TValue fillValue) {
   }
@@ -672,6 +692,7 @@ Mapserver<TMapstack, TData, TValue, TChild>::Mapserver(ros::NodeHandle *nh)
   n->getParam("min_y_m", this->minY_m);
   n->getParam("max_z_m", this->maxZ_m);
   n->getParam("min_z_m", this->minZ_m);
+  n->getParam("num_spinner", this->numSpinner);
   Mapserver::getMapInitValue(std::string("mapInit_value"), this->mapInitValue,
                              n);
   n->getParam("map_storage_location", this->mapStorageLocation);
@@ -759,7 +780,7 @@ void Mapserver<TMapstack, TData, TValue, TChild>::mapRefreshAndStorage(
           << int(
               round(
                   resolution_meterPerTile
-                      * double(geometry::millimeterPerMeter))) << "mm_" << "X_"
+                      * double(constants::geometry::millimeterPerMeter))) << "mm_" << "X_"
           << transformRoiInWorldLast.getOrigin().x() << "m_" << "Y_"
           << transformRoiInWorldLast.getOrigin().y() << "m_" << "Z_"
           << transformRoiInWorldLast.getOrigin().z() << "m_" << "rows_"
@@ -1002,3 +1023,31 @@ std::shared_ptr<tf::Stamped<tf::Pose>> Mapserver<TMapstack, TData, TValue, TChil
   }
   return poseInTargetFrameReturn;
 }
+
+
+template<typename TMapstack, typename TData, typename TValue, typename TChild>
+void Mapserver<TMapstack, TData, TValue, TChild>::spin() {
+  ros::AsyncSpinner spinner(this->numSpinner);
+  spinner.start();
+  // Do stuff periodically
+  ros::Rate _rate(this->rate);
+  ROS_INFO("Mapserver starts spinning");
+  while (ros::ok()) {
+    this->spinOnce();
+    _rate.sleep();
+  }
+}
+
+template<typename TMapstack, typename TData, typename TValue, typename TChild>
+void Mapserver<TMapstack, TData, TValue, TChild>::correctInvalidOrientation(tf::Pose &pose) {
+  if (pose.getRotation().x() < tf::QUATERNION_TOLERANCE
+      && pose.getRotation().y() < tf::QUATERNION_TOLERANCE
+      && pose.getRotation().z() < tf::QUATERNION_TOLERANCE
+      && pose.getRotation().w() < tf::QUATERNION_TOLERANCE) {
+    ROS_WARN_ONCE(
+        "correctInvalidOrientation: Pose with quaternion(0,0,0,0) detected. Interpretation as (0,0,0,1)");
+    pose.setRotation(tf::Quaternion(0, 0, 0, 1));
+  }
+}
+
+

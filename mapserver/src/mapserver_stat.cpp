@@ -144,17 +144,6 @@ sensor_msgs::PointCloud::Ptr MapserverStat::ogmCellsToPointCloud(
 
 }
 
-void MapserverStat::correctInvalidOrientation(tf::Pose &pose) {
-  if (pose.getRotation().x() < tf::QUATERNION_TOLERANCE
-      && pose.getRotation().y() < tf::QUATERNION_TOLERANCE
-      && pose.getRotation().z() < tf::QUATERNION_TOLERANCE
-      && pose.getRotation().w() < tf::QUATERNION_TOLERANCE) {
-    ROS_WARN_ONCE(
-        "correctInvalidOrientation: Pose with quaternion(0,0,0,0) detected. Interpretation as (0,0,0,1)");
-    pose.setRotation(tf::Quaternion(0, 0, 0, 1));
-  }
-}
-
 std::shared_ptr<std::vector<tf::Point>> MapserverStat::getOgmCornerPoints(
     const nav_msgs::OccupancyGrid::ConstPtr ogm, const std::string &targetFrame,
     const tf::TransformListener &tfListener) {
@@ -671,7 +660,7 @@ void MapserverStat::doIsmFusion(const nav_msgs::OccupancyGrid::ConstPtr &msg,
 //  }
 
   if (debug) {
-    msgTmp = msg;
+    this->msgDebug = msg;
   }
 }
 
@@ -729,8 +718,7 @@ void MapserverStat::formatAndSendGrid(
     const std::shared_ptr<
         std::map<std::string, mrpt::maps::COccupancyGridMap2D*>> mapStack,
     ros::NodeHandle &n, const std::string topicPrefixGrid,
-    const std::shared_ptr<tf::Pose> tfPose, std::string topicSufixGrid,
-    std::string topicSufixPointCloud) {
+    const std::shared_ptr<tf::Pose> tfPose, std::string topicSuffixGrid) {
   const char fName[] = "formatAndSendGrid";
   const float gridSpacing_m = 0.01;
   const float minDrawOccupancyUpdateCertainty = 0.5;
@@ -801,7 +789,7 @@ void MapserverStat::formatAndSendGrid(
           std::pair<std::string, ros::Publisher>(
               mapIt->first,
               n.advertise<nav_msgs::GridCells>(
-                  topicPrefixGrid + mapIt->first + topicSufixGrid, 1)));
+                  topicPrefixGrid + mapIt->first + topicSuffixGrid, 1)));
       publisherIt = --mapPublisher.end();
     }
 
@@ -1018,7 +1006,7 @@ void MapserverStat::spinOnce() {
   if (debug) {
     try {
       //            std::shared_ptr<cv::Mat> image(mrptOggToGrayScale(*currentMapStack->at(debugTopic)));
-      //            std::shared_ptr<cv::Mat> image(Mapserver::rosOccToGrayScale(msgTmp));
+      //            std::shared_ptr<cv::Mat> image(Mapserver::rosOccToGrayScale(this->msgDebug));
       //              if (image) {
       //                  cv::flip(*image, *image, 0);
       //                  cv::imshow( "Current View", *image);
@@ -1041,18 +1029,6 @@ void MapserverStat::spinOnce() {
   // Add new subscribers
   this->advertiseSubscribers(subIsmList, &MapserverStat::doIsmFusion, this,
                              topicPrefix, debug);
-}
-
-void MapserverStat::spin() {
-  ros::AsyncSpinner spinner(5);
-  spinner.start();
-  // Do stuff periodically
-  ros::Rate _rate(rate);
-  ROS_INFO("Mapserver starts spinning");
-  while (ros::ok()) {
-    this->spinOnce();
-    _rate.sleep();
-  }
 }
 
 // Translate a map
