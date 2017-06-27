@@ -189,8 +189,8 @@ std::shared_ptr<std::vector<tf::Point>> MapserverStat::getOgmCornerPoints(
     const tf::TransformListener &tfListener) {
   std::shared_ptr<std::vector<tf::Point>> points;
   // Get pose of the OGM in the target frame
-  std::shared_ptr<tf::Stamped<tf::Pose>> targetPoseInOgmFrame = Mapserver::getPoseInFrame(
-      targetPose, ogm->header.frame_id, tfListener);
+  std::shared_ptr<tf::Stamped<tf::Pose>> targetPoseInOgmFrame =
+      Mapserver::getPoseInFrame(targetPose, ogm->header.frame_id, tfListener);
   if (targetPoseInOgmFrame) {
     // First get the corner points in own frame
     points = getOgmCornerPoints(ogm, ogm->header.frame_id, tfListener);
@@ -947,6 +947,12 @@ MapserverStat::MapserverStat(ros::NodeHandle& nh)
     : Mapserver(&nh),
       n(nh) {
 
+  // Check the initialization value again
+  this->mapInitValue = mrpt::maps::COccupancyGridMap2D::p2l(0.5);
+  Mapserver::getMapInitValue(std::string("mapInit_value"), this->mapInitValue,
+                             &this->n);
+
+  // Check the other parameters
   this->n.param<std::string>("debug_ism_topic", debugIsmTopic,
                              "/ism/radar/tracking/radar_return");  // The topic of the ISM which is resend as transformed ISM in the mapserver frame
   this->n.param<std::string>("debug_topic", debugTopic, "/amiro2/ism/cam");  // The topic of the fused map to show via opencv
@@ -1018,8 +1024,11 @@ void MapserverStat::spinOnce() {
     }
     // Publish the maps
     std::vector<std::string> foo;
-    tf::Vector3 trans = tf::Vector3(tfScalar(-(maxX_m - minX_m)/2.0f), tfScalar(-(maxY_m - minY_m)/2.0f), tfScalar(0.0f));
-    std::shared_ptr<tf::Pose> poseOffset = std::shared_ptr<tf::Pose>(new tf::Pose(tf::Quaternion(0,0,0,1), trans));
+    tf::Vector3 trans = tf::Vector3(tfScalar(-(maxX_m - minX_m) / 2.0f),
+                                    tfScalar(-(maxY_m - minY_m) / 2.0f),
+                                    tfScalar(0.0f));
+    std::shared_ptr<tf::Pose> poseOffset = std::shared_ptr<tf::Pose>(
+        new tf::Pose(tf::Quaternion(0, 0, 0, 1), trans));
     std::string reference = currentTileTfName + tileOriginTfSufixForRoiOrigin;
     formatAndSendGrid(foo, reference, currentMapStack, n, topicDebugGridPrefix);
   }
@@ -1077,3 +1086,14 @@ void MapserverStat::fillMapStack(
   fillMapStack(mapStack, mrpt::maps::COccupancyGridMap2D::p2l(fillValue));
 }
 
+// Set map tiles of maps to the given value
+void MapserverStat::fillMap(
+    mrpt::maps::COccupancyGridMap2D &map,
+    mrpt::maps::COccupancyGridMap2D::cellType fillValue) {
+  map.fill(mrpt::maps::COccupancyGridMap2D::l2p(fillValue));
+}
+
+void* MapserverStat::getRawData(
+    mrpt::maps::COccupancyGridMap2D *map) {
+  return (void*) map->getRawMap().data();
+}

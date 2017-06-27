@@ -236,11 +236,19 @@ target_link_libraries(mapserver
   ${Boost_LIBRARIES}
 )
 
-add_executable(mapserver_raw src/mapserver_raw.cpp)
+add_library(mapserver_raw src/mapserver_raw.cpp)
 target_link_libraries(mapserver_raw
   ${catkin_LIBRARIES}
   ${OpenCV_LIBRARIES}
   ${Boost_LIBRARIES}
+)
+
+add_executable(mapserver_raw_node src/mapserver_raw_node.cpp)
+target_link_libraries(mapserver_raw_node
+  ${catkin_LIBRARIES}
+  ${OpenCV_LIBRARIES}
+  ${Boost_LIBRARIES}
+  mapserver_raw
 )
 
 add_executable(tile_publisher src/tile_publisher.cpp)
@@ -284,6 +292,7 @@ target_link_libraries(mapserver_stat_node
 # Add the msg and srv generation as dependency
 add_dependencies(tile_publisher mapserver_gencpp)
 add_dependencies(mapserver_raw mapserver_gencpp)
+add_dependencies(mapserver_raw_node mapserver_gencpp)
 add_dependencies(mapserver_raw_rpc_test mapserver_msgs_gencpp mapserver_gencpp)
 add_dependencies(mapserver_stat mapserver_msgs_gencpp mapserver_gencpp)
 add_dependencies(mapserver_stat_node mapserver_msgs_gencpp mapserver_gencpp)

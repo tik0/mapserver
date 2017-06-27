@@ -1,8 +1,5 @@
 // MRPT
 #include <mrpt/maps/CMultiMetricMap.h>
-//#include <mrpt/maps.h>
-//#include <mrpt/opengl.h>
-//#include <mrpt/gui.h>
 #if defined(OCCUPANCY_GRIDMAP_CELL_SIZE_8BITS)
 #define OCCUPANCY_GRIDMAP_CELL_SIZE 1
 #else // defined(OCCUPANCY_GRIDMAP_CELL_SIZE_16BITS)
@@ -11,44 +8,13 @@
 
 
 #include "mapserver.hpp"
-
-
-// Stdandard libraries
-#include <mutex>          // std::mutex
-#include <future>
-#include <math.h>
-#include <string>
-#include <iostream>
-#include <sstream>
-#include <algorithm>    // std::min
-#include <exception>
-#include <map>
-#include <memory>
-
 #include <Constants.hpp>
+#include <nav_msgs/GridCells.h>
+#include <utils.h>
 
 using namespace constants;
 using namespace constants::mappingLayers;
 namespace numerics = constants::numeric;
-
-
-
-// ROS
-#include <ros/ros.h>
-#include <ros/spinner.h>
-#include <ros/console.h>
-#include <std_msgs/String.h>
-#include <mapserver_msgs/pnsTuple.h>
-#include <rosgraph_msgs/Log.h>
-#include <tf_conversions/tf_eigen.h>
-#include <rosapi/Topics.h>
-#include <std_msgs/String.h>
-#include <nav_msgs/OccupancyGrid.h>
-#include <nav_msgs/GridCells.h>
-#include <sensor_msgs/PointCloud2.h>
-#include <type_traits>
-
-#include <utils.h>
 
 class MapserverStat : public Mapserver<mrpt::maps::COccupancyGridMap2D,
     nav_msgs::OccupancyGrid, mrpt::maps::COccupancyGridMap2D::cellType,
@@ -92,6 +58,13 @@ class MapserverStat : public Mapserver<mrpt::maps::COccupancyGridMap2D,
   ///
   virtual ~MapserverStat() {
   };
+
+  ///
+  /// \brief Returns the data pointer of the map
+  /// \param map The map
+  /// \return Pointer to the begin of the map
+  ///
+  virtual void* getRawData(mrpt::maps::COccupancyGridMap2D *map);
 
   ///
   /// \brief Converts the mapstack to a colored image
@@ -302,5 +275,16 @@ class MapserverStat : public Mapserver<mrpt::maps::COccupancyGridMap2D,
   void fillMapStack(std::vector<mrpt::maps::COccupancyGridMap2D> &mapStack,
                     float fillValue =
                         mapping::ogm::unknownOccupancyUpdateCertainty);
+
+  ///
+  /// \brief Set all map tiles of a map to the given value
+  /// \param mapStack The mapstack to reset
+  /// \param fillValue Probability fill-up value in loggodds
+  ///
+  virtual void fillMap(
+      mrpt::maps::COccupancyGridMap2D &map,
+      mrpt::maps::COccupancyGridMap2D::cellType fillValue =
+          mrpt::maps::COccupancyGridMap2D::cellType(
+              mapping::ogm::unknownOccupancyUpdateCertainty));
 
 };
