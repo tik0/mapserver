@@ -287,4 +287,24 @@ class MapserverStat : public Mapserver<mrpt::maps::COccupancyGridMap2D,
           mrpt::maps::COccupancyGridMap2D::cellType(
               mapping::ogm::unknownOccupancyUpdateCertainty));
 
+  ///
+  /// \brief Print the MRPT look-up table for reference
+  /// \param precision Precision for print
+  /// \param increment Increment value for table
+  ///
+  static void printMrptLookUpTable(int precision = 3, float increment = 0.01f) {
+    std::cerr << "Print MRPT look-up table for ";
+    if (std::is_same<mrpt::maps::COccupancyGridMap2D::cellType, int8_t>::value) {
+      std::cerr << "int8_t";
+    } else if (std::is_same<mrpt::maps::COccupancyGridMap2D::cellType, int16_t>::value) {
+      std::cerr << "int16_t";
+    }
+    std::cerr << ":\n";
+    std::cerr.setf( std::ios::fixed, std:: ios::floatfield );
+    std::cerr.precision(precision);
+    for (float idx = 0.0f; idx <= 1.0f; idx = idx + increment) {
+      std::cerr << idx <<  ": " << int(mrpt::maps::COccupancyGridMap2D::p2l(idx)) << "\n";
+    }
+  }
+
 };

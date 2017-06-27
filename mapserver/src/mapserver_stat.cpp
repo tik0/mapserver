@@ -947,10 +947,10 @@ MapserverStat::MapserverStat(ros::NodeHandle& nh)
     : Mapserver(&nh),
       n(nh) {
 
-  // Check the initialization value again
-  this->mapInitValue = mrpt::maps::COccupancyGridMap2D::p2l(0.5);
-  Mapserver::getMapInitValue(std::string("mapInit_value"), this->mapInitValue,
-                             &this->n);
+  // Print the MRPT look-up table values
+  if (debug) {
+    MapserverStat::printMrptLookUpTable();
+  }
 
   // Check the other parameters
   this->n.param<std::string>("debug_ism_topic", debugIsmTopic,
