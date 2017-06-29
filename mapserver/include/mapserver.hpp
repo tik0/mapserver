@@ -964,16 +964,16 @@ void Mapserver<TMapstack, TData, TValue, TChild>::getMapInitValue(
     int mapInit_value;
     n->getParam("mapInit_value", mapInit_value);
     ROS_ASSERT(
-        mapInit_value < std::numeric_limits<short>::lowest()
-            || mapInit_value > std::numeric_limits<short>::max());
+        mapInit_value > int(std::numeric_limits<short>::lowest())
+            && mapInit_value < int(std::numeric_limits<short>::max()));
     mapInitValue = TValue(mapInit_value);
   } else if (std::is_same<TValue, char>::value ||
       std::is_same<TValue, int8_t>::value) {
     int mapInit_value;
     n->getParam("mapInit_value", mapInit_value);
     ROS_ASSERT(
-        mapInit_value < std::numeric_limits<char>::lowest()
-            || mapInit_value > std::numeric_limits<char>::max());
+        (mapInit_value > int(std::numeric_limits<char>::lowest()))
+            && (mapInit_value < int(std::numeric_limits<char>::max())));
     mapInitValue = TValue(mapInit_value);
   } else {
     ROS_ERROR("No known conversion for TValue in mapserver");

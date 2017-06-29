@@ -581,19 +581,6 @@ void MapserverStat::doIsmFusion(const nav_msgs::OccupancyGrid::ConstPtr &msg,
     ROS_DEBUG("OK: Do the sensor fusion");
   }
 
-  if (debug) {
-    if (!topic.compare(debugIsmTopic)) {
-      publisherIsmAsOgm.publish(ogmTransformed);
-    }
-    // Send OGM as point cloud
-    //      sensor_msgs::PointCloudPtr ogmPtCloud = ogmCellsToPointCloud(msg, "world", *listenerTf, 0, 0, msg->info.width, msg->info.height);
-    //      if(ogmPtCloud) {
-    //          publisherIsmAsPointCloud.publish(ogmPtCloud);
-    //      } else {
-    //          ROS_ERROR("Debug: ISM as point cloud not valid");
-    //      }
-  }
-
   // Update a sensor scan:
   // The transformation already points to the lower left edge of the sensor scan
   // Rotation is not allowed for now
@@ -626,6 +613,19 @@ void MapserverStat::doIsmFusion(const nav_msgs::OccupancyGrid::ConstPtr &msg,
   // Add blind spots to the ISM
   MapserverStat::addBlindSpotsToOgm(ogmTransformed, blindSpots,
                                     *this->listenerTf);
+
+  if (debug) {
+    if (!topic.compare(debugIsmTopic)) {
+      publisherIsmAsOgm.publish(ogmTransformed);
+    }
+    // Send OGM as point cloud
+    //      sensor_msgs::PointCloudPtr ogmPtCloud = ogmCellsToPointCloud(msg, "world", *listenerTf, 0, 0, msg->info.width, msg->info.height);
+    //      if(ogmPtCloud) {
+    //          publisherIsmAsPointCloud.publish(ogmPtCloud);
+    //      } else {
+    //          ROS_ERROR("Debug: ISM as point cloud not valid");
+    //      }
+  }
 
   for (int idy = 0;
       idy < std::min(ogmTransformed->info.height, map->getSizeY()); ++idy) {
@@ -850,7 +850,7 @@ void MapserverStat::addBlindSpotsToOgm(
 //  BlindSpots blindSpots;
 //  pts.push_back(pt);
 
-  // We assume the the OGM lies in its origin (s.t. ogmTransformed->info.origin)
+  // We assume that the OGM lies in its origin (s.t. ogmTransformed->info.origin)
   for (auto pt = blindSpots.begin(); pt < blindSpots.end(); ++pt) {
 
     // Expand the two poses to all four points of the rectangular
@@ -868,21 +868,21 @@ void MapserverStat::addBlindSpotsToOgm(
     const tfScalar p3SrcX = std::max(std::get<0>(*pt).getOrigin().getX(),
                                      std::get<1>(*pt).getOrigin().getX());
     const tfScalar p3SrcY = p2SrcY;
-    const tfScalar p4SrcX = p1SrcX;
-    const tfScalar p4SrcY = p3SrcY;
+    const tfScalar p4SrcX = p3SrcX;
+    const tfScalar p4SrcY = p1SrcY;
     const tf::Quaternion q = tf::Quaternion(0, 0, 0, 1);
     const tf::Stamped<tf::Pose> ps1Src = tf::Stamped<tf::Pose>(
         tf::Pose(q, tf::Vector3(p1SrcX, p1SrcY, tfScalar(0))),
-        std::get<0>(*pt).stamp_, std::get<0>(*pt).frame_id_);
+        ogm->header.stamp, std::get<0>(*pt).frame_id_);
     const tf::Stamped<tf::Pose> ps2Src = tf::Stamped<tf::Pose>(
         tf::Pose(q, tf::Vector3(p2SrcX, p2SrcY, tfScalar(0))),
-        std::get<0>(*pt).stamp_, std::get<0>(*pt).frame_id_);
+        ogm->header.stamp, std::get<0>(*pt).frame_id_);
     const tf::Stamped<tf::Pose> ps3Src = tf::Stamped<tf::Pose>(
         tf::Pose(q, tf::Vector3(p3SrcX, p3SrcY, tfScalar(0))),
-        std::get<0>(*pt).stamp_, std::get<0>(*pt).frame_id_);
+        ogm->header.stamp, std::get<0>(*pt).frame_id_);
     const tf::Stamped<tf::Pose> ps4Src = tf::Stamped<tf::Pose>(
         tf::Pose(q, tf::Vector3(p4SrcX, p4SrcY, tfScalar(0))),
-        std::get<0>(*pt).stamp_, std::get<0>(*pt).frame_id_);
+        ogm->header.stamp, std::get<0>(*pt).frame_id_);
 
     // Get the points in the destination frame
     std::shared_ptr<tf::Stamped<tf::Pose>> ps1Dst = Mapserver::getPoseInFrame(
@@ -894,29 +894,50 @@ void MapserverStat::addBlindSpotsToOgm(
     std::shared_ptr<tf::Stamped<tf::Pose>> ps4Dst = Mapserver::getPoseInFrame(
         ps4Src, ogm->header.frame_id, tfListener);
 
+    ROS_DEBUG_STREAM(
+        std::setprecision(2) << "Blind spot poses [p1 -- p4] in "
+            << std::get<0>(*pt).frame_id_ << " frame : \n" << "[x: "
+            << ps1Src.getOrigin().getX() << ", y: " << ps1Src.getOrigin().getY()
+            << "]\n" << "[x: " << ps2Src.getOrigin().getX() << ", y: "
+            << ps2Src.getOrigin().getY() << "]\n" << "[x: "
+            << ps3Src.getOrigin().getX() << ", y: " << ps3Src.getOrigin().getY()
+            << "]\n" << "[x: " << ps4Src.getOrigin().getX() << ", y: "
+            << ps4Src.getOrigin().getY() << "]\n");
+    ROS_DEBUG_STREAM(
+        std::setprecision(2) << "Blind spot poses [p1 -- p4] in "
+            << ogm->header.frame_id << " frame : \n" << "[x: "
+            << ps1Dst->getOrigin().getX() << ", y: "
+            << ps1Dst->getOrigin().getY() << "]\n" << "[x: "
+            << ps2Dst->getOrigin().getX() << ", y: "
+            << ps2Dst->getOrigin().getY() << "]\n" << "[x: "
+            << ps3Dst->getOrigin().getX() << ", y: "
+            << ps3Dst->getOrigin().getY() << "]\n" << "[x: "
+            << ps4Dst->getOrigin().getX() << ", y: "
+            << ps4Dst->getOrigin().getY() << "]\n");
+
     // Draw if possible
     if (ps1Dst != NULL && ps2Dst != NULL && ps3Dst != NULL && ps4Dst != NULL) {
       // Get the raw pointer
       std::shared_ptr<cv::Mat> map = Mapserver::rosOccToImage(ogm);
       // Draw the blind spot
-      cv::Point points[1][4];
-      points[0][0] = cv::Point(
+      std::vector<cv::Point> points(4);
+      points.at(0) = cv::Point(
           ps1Dst->getOrigin().getX() / ogm->info.resolution,
-          ps1Dst->getOrigin().getX() / ogm->info.resolution);
-      points[0][1] = cv::Point(
+          ps1Dst->getOrigin().getY() / ogm->info.resolution);
+      points.at(1) = cv::Point(
           ps2Dst->getOrigin().getX() / ogm->info.resolution,
-          ps2Dst->getOrigin().getX() / ogm->info.resolution);
-      points[0][2] = cv::Point(
+          ps2Dst->getOrigin().getY() / ogm->info.resolution);
+      points.at(2) = cv::Point(
           ps3Dst->getOrigin().getX() / ogm->info.resolution,
-          ps3Dst->getOrigin().getX() / ogm->info.resolution);
-      points[0][3] = cv::Point(
+          ps3Dst->getOrigin().getY() / ogm->info.resolution);
+      points.at(3) = cv::Point(
           ps4Dst->getOrigin().getX() / ogm->info.resolution,
-          ps4Dst->getOrigin().getX() / ogm->info.resolution);
-      const cv::Point* ppt[1] = { points[0] };
-      const int npt[] = { 4 };
-      cv::fillPoly(*map, ppt, npt, 1,
-                   cv::Scalar(50.0 /*Unknown value in ROS occupancy grid map*/),
-                   8 /*8-connected line*/);
+          ps4Dst->getOrigin().getY() / ogm->info.resolution);
+
+      cv::fillConvexPoly(
+          *map, points,
+          cv::Scalar(50.0 /*Unknown value in ROS occupancy grid map*/),
+          8 /*8-connected line*/);
     } else {
       ROS_WARN_STREAM("Blind spot not transformable");
     }
@@ -1133,25 +1154,21 @@ void MapserverStat::getBlindSpots(ros::NodeHandle &n, BlindSpots &blindSpots) {
         ROS_DEBUG_STREAM(*key << " matches");
         XmlRpc::XmlRpcValue blindSpotList;
         n.getParam(*key, blindSpotList);
-        std::cerr << "TYPE: " << blindSpotList.getType() << std::endl;
-        ROS_ASSERT(blindSpotList.size() != 5);  // s.t. 5 is the number of possible entries [p1x, p1y, p2x, p2y, frame_id]
-        std::cerr << "1\n";
+        ROS_ASSERT(blindSpotList.getType() == XmlRpc::XmlRpcValue::TypeArray);
+        ROS_ASSERT(blindSpotList.size() == 5);  // s.t. 5 is the number of possible entries [p1x, p1y, p2x, p2y, frame_id]
         ROS_ASSERT(
-            blindSpotList[0].getType() != XmlRpc::XmlRpcValue::TypeDouble);
+            blindSpotList[0].getType() == XmlRpc::XmlRpcValue::TypeDouble);
         ROS_ASSERT(
-            blindSpotList[1].getType() != XmlRpc::XmlRpcValue::TypeDouble);
-        std::cerr << "2\n";
+            blindSpotList[1].getType() == XmlRpc::XmlRpcValue::TypeDouble);
         tf::Pose p1 = tf::Pose(
             tf::Quaternion(0, 0, 0, 1),
             tf::Vector3(tfScalar(static_cast<double>(blindSpotList[0])),
                         tfScalar(static_cast<double>(blindSpotList[1])),
                         tfScalar(0)));
-        std::cerr << "2.5\n";
         ROS_ASSERT(
-            blindSpotList[2].getType() != XmlRpc::XmlRpcValue::TypeDouble);
+            blindSpotList[2].getType() == XmlRpc::XmlRpcValue::TypeDouble);
         ROS_ASSERT(
-            blindSpotList[3].getType() != XmlRpc::XmlRpcValue::TypeDouble);
-        std::cerr << "3\n";
+            blindSpotList[3].getType() == XmlRpc::XmlRpcValue::TypeDouble);
         std::cerr << std::endl;
         tf::Pose p2 = tf::Pose(
             tf::Quaternion(0, 0, 0, 1),
@@ -1159,7 +1176,7 @@ void MapserverStat::getBlindSpots(ros::NodeHandle &n, BlindSpots &blindSpots) {
                         tfScalar(static_cast<double>(blindSpotList[3])),
                         tfScalar(0)));
         ROS_ASSERT(
-            blindSpotList[4].getType() != XmlRpc::XmlRpcValue::TypeString);
+            blindSpotList[4].getType() == XmlRpc::XmlRpcValue::TypeString);
         tf::Stamped<tf::Pose> ps1 = tf::Stamped<tf::Pose>(
             p1, ros::Time(0.0), static_cast<std::string>(blindSpotList[4]));
         tf::Stamped<tf::Pose> ps2 = tf::Stamped<tf::Pose>(

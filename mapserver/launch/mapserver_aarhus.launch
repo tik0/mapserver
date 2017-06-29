@@ -71,7 +71,7 @@
     <param name="dont_store_maps" type="int" value="0" />
     <param name="debug" type="int" value="1" />
     <param name="debug_topic" value="/ism/cam" />
-    <param name="debug_ism_topic" value="/ism/radar/tracking/radar_return" />
+    <param name="debug_ism_topic" value="/ism/velodyne/svm/vegetation" />
     <param name="debug_draw_rpc_in_view" type="int" value="0" />
     <param name="max_x_m" value="$(eval arg('roi_width') / 2)" />
     <param name="max_y_m" value="$(eval arg('roi_height') / 2)" />
