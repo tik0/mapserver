@@ -23,6 +23,7 @@
 #include <tf_conversions/tf_eigen.h>
 #include <rosapi/Topics.h>
 #include <std_msgs/String.h>
+#include <xmlrpcpp/XmlRpc.h>
 
 #include <nav_msgs/OccupancyGrid.h>
 #include <geometry_msgs/PoseArray.h>
@@ -333,12 +334,27 @@ class Mapserver {
                     double offsety, TValue fillValue);
 
   ///
-  /// \brief Converts and occupancy grid map to a grayscale image in open cv
+  /// \brief Converts and occupancy grid map to a CV_8UC1 grayscale image in OpenCV
   /// \param map The occupancy grid map
   /// \return Shared pointer on image. Pointer is zero, if image allocation fails
   ///
   static std::shared_ptr<cv::Mat> rosOccToGrayScale(nav_msgs::OccupancyGrid::ConstPtr map);
 
+  ///
+  /// \brief Converts and occupancy grid map to a CV_8SC1 image in OpenCV
+  /// \param map The occupancy grid map
+  /// \return Shared pointer on image. Pointer is zero, if image allocation fails
+  ///
+  static std::shared_ptr<cv::Mat> rosOccToImage(nav_msgs::OccupancyGrid::ConstPtr map);
+
+  ///
+  /// \brief Converts any one channel, row major map to the corresponding OpenCV image
+  /// \param map The map
+  /// \param width_cells Number of columns
+  /// \param height_cells Number of rows
+  /// \return Shared pointer on image. Pointer is zero, if image allocation fails
+  ///
+  static std::shared_ptr<cv::Mat> mapToImage(TMapstack &map, int width_cells, int height_cells);
 
   ///
   /// \brief Transforms pose into target frame
@@ -987,6 +1003,67 @@ std::shared_ptr<cv::Mat> Mapserver<TMapstack, TData, TValue, TChild>::rosOccToGr
 
 //  DEBUG_MSG("Server returns map")
 //   cv::flip(*dst, *dst, 0);  // horizontal flip
+  return dst;
+}
+
+template<typename TMapstack, typename TData, typename TValue, typename TChild>
+std::shared_ptr<cv::Mat> Mapserver<TMapstack, TData, TValue, TChild>::rosOccToImage(
+    nav_msgs::OccupancyGrid::ConstPtr map) {
+
+  std::shared_ptr<cv::Mat> dst;
+
+  if (map) {
+    if (map->info.width > 0 && map->info.height > 0) {
+      dst = std::shared_ptr<cv::Mat>(
+          new cv::Mat(map->info.height, map->info.width, CV_8SC1, (void*) map->data.data()));
+    }
+  }
+
+//  DEBUG_MSG("Server returns map")
+//   cv::flip(*dst, *dst, 0);  // horizontal flip
+  return dst;
+}
+
+template<typename TMapstack, typename TData, typename TValue, typename TChild>
+std::shared_ptr<cv::Mat> Mapserver<TMapstack, TData, TValue, TChild>::mapToImage(
+    TMapstack &map, int width_cells, int height_cells) {
+
+  std::shared_ptr<cv::Mat> dst;
+  int type;
+
+  if (std::is_same<TValue, bool>::value) {
+    type = CV_8U;
+  } else if (std::is_same<TValue, float>::value) {
+    type = CV_32F;
+  } else if (std::is_same<TValue, double>::value) {
+    type = CV_64F;
+  } else if (std::is_same<TValue, int>::value ||
+      std::is_same<TValue, int32_t>::value) {
+    type = CV_32S;
+  } else if (std::is_same<TValue, short>::value ||
+      std::is_same<TValue, int16_t>::value) {
+    type = CV_16S;
+  } else if (std::is_same<TValue, char>::value ||
+      std::is_same<TValue, int8_t>::value) {
+    type = CV_8S;
+  } else if (std::is_same<TValue, uint>::value ||
+      std::is_same<TValue, uint32_t>::value) {
+    type = CV_32S; // Should be CV_32U
+    ROS_WARN_ONCE("Unknown conversion CV_32U");
+  } else if (std::is_same<TValue, ushort>::value ||
+      std::is_same<TValue, uint16_t>::value) {
+    type = CV_16U;
+  } else if (std::is_same<TValue, uchar>::value ||
+      std::is_same<TValue, uint8_t>::value) {
+    type = CV_8U;
+  } else {
+    ROS_ERROR("No known conversion for TValue in mapserver");
+    return dst;
+  }
+
+  dst = std::shared_ptr<cv::Mat>(
+      new cv::Mat(height_cells, width_cells, type),getRawData(map));
+
   return dst;
 }
 

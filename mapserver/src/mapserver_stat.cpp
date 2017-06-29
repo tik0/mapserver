@@ -516,6 +516,10 @@ void MapserverStat::doIsmFusion(const nav_msgs::OccupancyGrid::ConstPtr &msg,
 
   // The current OGM (map) with which the ISM (msg) is fused
   mrpt::maps::COccupancyGridMap2D *map = NULL;
+  // The current map center tf name
+  std::string tileTfName;
+  // The current map origin tf name
+  std::string tileOriginTfName;
 
   // Sanity checks
   if (currentTileTfName.empty()) {
@@ -542,8 +546,9 @@ void MapserverStat::doIsmFusion(const nav_msgs::OccupancyGrid::ConstPtr &msg,
             topic,
             mrpt::maps::COccupancyGridMap2D::CreateFromMapDefinition(def)));
   }
-  std::string tileTfName = currentTileTfName;
+  tileTfName = currentTileTfName;
   mapRefresh.unlock();
+  tileOriginTfName = tileTfName + tileOriginTfSufixForRoiOrigin;
 
 // Some debug stuff
 //  tf::Pose ogmPose; tf::poseMsgToTF(msg->info.origin, ogmPose);
@@ -553,8 +558,7 @@ void MapserverStat::doIsmFusion(const nav_msgs::OccupancyGrid::ConstPtr &msg,
 
   // Target pose is the origin of the OGM frame
   tf::Stamped<tf::Pose> targetPose(tf::Pose(tf::Quaternion(0, 0, 0, 1)),
-                                   msg->header.stamp,
-                                   tileTfName + tileOriginTfSufixForRoiOrigin);
+                                   msg->header.stamp, tileOriginTfName);
   nav_msgs::OccupancyGrid::ConstPtr ogmTransformed = ogmTf(msg, targetPose,
                                                            resolution_mPerTile,
                                                            *listenerTf);  // Check homography
@@ -619,9 +623,9 @@ void MapserverStat::doIsmFusion(const nav_msgs::OccupancyGrid::ConstPtr &msg,
 //  const int mapOffsetYStart = transY / def.resolution + mapCenterY;
 //  const int mapOffsetYEnd   = (transY + max_y - min_y) / def.resolution + mapCenterY;
 
-  // Do a point wise sensor fusion
-//  for (int idy = mapOffsetYStart; idy < mapOffsetYEnd ; ++idy) {
-//    for (int idx = mapOffsetXStart; idx < mapOffsetXEnd ; ++idx) {
+  // Add blind spots to the ISM
+  MapserverStat::addBlindSpotsToOgm(ogmTransformed, blindSpots,
+                                    *this->listenerTf);
 
   for (int idy = 0;
       idy < std::min(ogmTransformed->info.height, map->getSizeY()); ++idy) {
@@ -832,6 +836,93 @@ void MapserverStat::formatAndSendGrid(
 
 }
 
+void MapserverStat::addBlindSpotsToOgm(
+    nav_msgs::OccupancyGrid::ConstPtr ogm, const BlindSpots &blindSpots,
+    const tf::TransformListener &tfListener) {
+
+  // Test
+//  tf::Pose p1 = tf::Pose(tf::Quaternion(0,0,0,1), tf::Vector3(tfScalar(0), tfScalar(0), tfScalar(0)));
+//  tf::Pose p2 = tf::Pose(tf::Quaternion(0,0,0,1), tf::Vector3(tfScalar(1), tfScalar(1), tfScalar(0)));
+//  std::string pf1 = "base_link";
+//  tf::Stamped<tf::Pose> ps1 =  tf::Stamped<tf::Pose>(p1, msg->header.stamp, pf1);
+//  tf::Stamped<tf::Pose> ps2 =  tf::Stamped<tf::Pose>(p2, msg->header.stamp, pf1);
+//  BlindSpot pt = std::make_tuple(ps1, ps2);
+//  BlindSpots blindSpots;
+//  pts.push_back(pt);
+
+  // We assume the the OGM lies in its origin (s.t. ogmTransformed->info.origin)
+  for (auto pt = blindSpots.begin(); pt < blindSpots.end(); ++pt) {
+
+    // Expand the two poses to all four points of the rectangular
+    // points which lie straight in the source frame
+    // p2-----p3
+    // |       |
+    // p1-----p4
+    const tfScalar p1SrcX = std::min(std::get<0>(*pt).getOrigin().getX(),
+                                     std::get<1>(*pt).getOrigin().getX());
+    const tfScalar p1SrcY = std::min(std::get<0>(*pt).getOrigin().getY(),
+                                     std::get<1>(*pt).getOrigin().getY());
+    const tfScalar p2SrcX = p1SrcX;
+    const tfScalar p2SrcY = std::max(std::get<0>(*pt).getOrigin().getY(),
+                                     std::get<1>(*pt).getOrigin().getY());
+    const tfScalar p3SrcX = std::max(std::get<0>(*pt).getOrigin().getX(),
+                                     std::get<1>(*pt).getOrigin().getX());
+    const tfScalar p3SrcY = p2SrcY;
+    const tfScalar p4SrcX = p1SrcX;
+    const tfScalar p4SrcY = p3SrcY;
+    const tf::Quaternion q = tf::Quaternion(0, 0, 0, 1);
+    const tf::Stamped<tf::Pose> ps1Src = tf::Stamped<tf::Pose>(
+        tf::Pose(q, tf::Vector3(p1SrcX, p1SrcY, tfScalar(0))),
+        std::get<0>(*pt).stamp_, std::get<0>(*pt).frame_id_);
+    const tf::Stamped<tf::Pose> ps2Src = tf::Stamped<tf::Pose>(
+        tf::Pose(q, tf::Vector3(p2SrcX, p2SrcY, tfScalar(0))),
+        std::get<0>(*pt).stamp_, std::get<0>(*pt).frame_id_);
+    const tf::Stamped<tf::Pose> ps3Src = tf::Stamped<tf::Pose>(
+        tf::Pose(q, tf::Vector3(p3SrcX, p3SrcY, tfScalar(0))),
+        std::get<0>(*pt).stamp_, std::get<0>(*pt).frame_id_);
+    const tf::Stamped<tf::Pose> ps4Src = tf::Stamped<tf::Pose>(
+        tf::Pose(q, tf::Vector3(p4SrcX, p4SrcY, tfScalar(0))),
+        std::get<0>(*pt).stamp_, std::get<0>(*pt).frame_id_);
+
+    // Get the points in the destination frame
+    std::shared_ptr<tf::Stamped<tf::Pose>> ps1Dst = Mapserver::getPoseInFrame(
+        ps1Src, ogm->header.frame_id, tfListener);
+    std::shared_ptr<tf::Stamped<tf::Pose>> ps2Dst = Mapserver::getPoseInFrame(
+        ps2Src, ogm->header.frame_id, tfListener);
+    std::shared_ptr<tf::Stamped<tf::Pose>> ps3Dst = Mapserver::getPoseInFrame(
+        ps3Src, ogm->header.frame_id, tfListener);
+    std::shared_ptr<tf::Stamped<tf::Pose>> ps4Dst = Mapserver::getPoseInFrame(
+        ps4Src, ogm->header.frame_id, tfListener);
+
+    // Draw if possible
+    if (ps1Dst != NULL && ps2Dst != NULL && ps3Dst != NULL && ps4Dst != NULL) {
+      // Get the raw pointer
+      std::shared_ptr<cv::Mat> map = Mapserver::rosOccToImage(ogm);
+      // Draw the blind spot
+      cv::Point points[1][4];
+      points[0][0] = cv::Point(
+          ps1Dst->getOrigin().getX() / ogm->info.resolution,
+          ps1Dst->getOrigin().getX() / ogm->info.resolution);
+      points[0][1] = cv::Point(
+          ps2Dst->getOrigin().getX() / ogm->info.resolution,
+          ps2Dst->getOrigin().getX() / ogm->info.resolution);
+      points[0][2] = cv::Point(
+          ps3Dst->getOrigin().getX() / ogm->info.resolution,
+          ps3Dst->getOrigin().getX() / ogm->info.resolution);
+      points[0][3] = cv::Point(
+          ps4Dst->getOrigin().getX() / ogm->info.resolution,
+          ps4Dst->getOrigin().getX() / ogm->info.resolution);
+      const cv::Point* ppt[1] = { points[0] };
+      const int npt[] = { 4 };
+      cv::fillPoly(*map, ppt, npt, 1,
+                   cv::Scalar(50.0 /*Unknown value in ROS occupancy grid map*/),
+                   8 /*8-connected line*/);
+    } else {
+      ROS_WARN_STREAM("Blind spot not transformable");
+    }
+  }
+}
+
 ///
 /// \brief Shows the current RPC if debug is on
 ///
@@ -977,6 +1068,9 @@ MapserverStat::MapserverStat(ros::NodeHandle& nh)
   def.max_y = this->maxY_m;
   def.min_y = this->minY_m;
 
+  // Parse the blind spots
+  MapserverStat::getBlindSpots(n, blindSpots);
+
   // Allocate space for the map and mapstacks
   this->currentMapStack = std::shared_ptr<
       std::map<std::string, mrpt::maps::COccupancyGridMap2D*>>(
@@ -1002,6 +1096,90 @@ MapserverStat::MapserverStat(ros::NodeHandle& nh)
       n.advertiseService(
           reqTopicMapStack/*scopes::map::statServer::parent + s + scopes::map::statServer::requests::mapStack*/,
           &MapserverStat::mapStatServerMapStack, this);
+}
+
+void MapserverStat::getBlindSpots(ros::NodeHandle &n, BlindSpots &blindSpots) {
+
+  ROS_INFO_STREAM("Start blindspot parsing");
+  std::string blinspotPrefix("blindspot_");
+  std::vector<std::string> keys;
+  n.getParamNames(keys);
+  for (auto key = keys.begin(); key < keys.end(); ++key) {
+
+    // Continue if the parameter is not in our namespace
+    try {
+      if (key->compare(0, n.getNamespace().size(), n.getNamespace()) != 0) {
+        ROS_DEBUG_STREAM(
+            *key << " is not a parameter in the " << n.getNamespace()
+                << " namespace => continue");
+        continue;
+      }
+    } catch (...) {
+      continue;
+    }
+    // Get rid of the namespace and check for the correct prefix
+    std::vector<std::string> strs;
+    boost::split(strs, *key, boost::is_any_of("/"));
+    if (strs.back().size() < blinspotPrefix.size()) {
+      ROS_DEBUG_STREAM(*key << " to short");
+      continue;
+    } else {
+      ROS_DEBUG_STREAM(*key << " matches in length");
+    }
+
+    // Parse the blindspot parameters
+    if (strs.back().compare(0, blinspotPrefix.size(), blinspotPrefix) == 0) {
+      try {
+        ROS_DEBUG_STREAM(*key << " matches");
+        XmlRpc::XmlRpcValue blindSpotList;
+        n.getParam(*key, blindSpotList);
+        std::cerr << "TYPE: " << blindSpotList.getType() << std::endl;
+        ROS_ASSERT(blindSpotList.size() != 5);  // s.t. 5 is the number of possible entries [p1x, p1y, p2x, p2y, frame_id]
+        std::cerr << "1\n";
+        ROS_ASSERT(
+            blindSpotList[0].getType() != XmlRpc::XmlRpcValue::TypeDouble);
+        ROS_ASSERT(
+            blindSpotList[1].getType() != XmlRpc::XmlRpcValue::TypeDouble);
+        std::cerr << "2\n";
+        tf::Pose p1 = tf::Pose(
+            tf::Quaternion(0, 0, 0, 1),
+            tf::Vector3(tfScalar(static_cast<double>(blindSpotList[0])),
+                        tfScalar(static_cast<double>(blindSpotList[1])),
+                        tfScalar(0)));
+        std::cerr << "2.5\n";
+        ROS_ASSERT(
+            blindSpotList[2].getType() != XmlRpc::XmlRpcValue::TypeDouble);
+        ROS_ASSERT(
+            blindSpotList[3].getType() != XmlRpc::XmlRpcValue::TypeDouble);
+        std::cerr << "3\n";
+        std::cerr << std::endl;
+        tf::Pose p2 = tf::Pose(
+            tf::Quaternion(0, 0, 0, 1),
+            tf::Vector3(tfScalar(static_cast<double>(blindSpotList[2])),
+                        tfScalar(static_cast<double>(blindSpotList[3])),
+                        tfScalar(0)));
+        ROS_ASSERT(
+            blindSpotList[4].getType() != XmlRpc::XmlRpcValue::TypeString);
+        tf::Stamped<tf::Pose> ps1 = tf::Stamped<tf::Pose>(
+            p1, ros::Time(0.0), static_cast<std::string>(blindSpotList[4]));
+        tf::Stamped<tf::Pose> ps2 = tf::Stamped<tf::Pose>(
+            p2, ros::Time(0.0), static_cast<std::string>(blindSpotList[4]));
+        BlindSpot pt = std::make_tuple(ps1, ps2);
+        ROS_INFO_STREAM(
+            "Parsing: " << "[p1x: " << ps1.getOrigin().getX() << "], "
+                << "[p1y: " << ps1.getOrigin().getY() << "], " << "[p2x: "
+                << ps2.getOrigin().getX() << "], " << "[p2y: "
+                << ps2.getOrigin().getY() << "], " << "[frame_id: "
+                << ps1.frame_id_ << "]");
+        blindSpots.push_back(pt);
+      } catch (XmlRpc::XmlRpcException a) {
+        std::cerr << "XmlRpc exception: " << a.getMessage() << std::endl;
+      }
+    } else {
+      ROS_DEBUG_STREAM(*key << " does not match");
+    }
+  }
+  ROS_INFO_STREAM("End blindspot parsing");
 }
 
 void MapserverStat::spinOnce() {
@@ -1093,7 +1271,6 @@ void MapserverStat::fillMap(
   map.fill(mrpt::maps::COccupancyGridMap2D::l2p(fillValue));
 }
 
-void* MapserverStat::getRawData(
-    mrpt::maps::COccupancyGridMap2D *map) {
+void* MapserverStat::getRawData(mrpt::maps::COccupancyGridMap2D *map) {
   return (void*) map->getRawMap().data();
 }

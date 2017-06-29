@@ -7,6 +7,7 @@
 #endif
 
 
+#include <boost/algorithm/string.hpp>
 #include "mapserver.hpp"
 #include <Constants.hpp>
 #include <nav_msgs/GridCells.h>
@@ -19,6 +20,9 @@ namespace numerics = constants::numeric;
 class MapserverStat : public Mapserver<mrpt::maps::COccupancyGridMap2D,
     nav_msgs::OccupancyGrid, mrpt::maps::COccupancyGridMap2D::cellType,
     MapserverStat> {
+
+ typedef std::tuple<tf::Stamped<tf::Pose>, tf::Stamped<tf::Pose>> BlindSpot;
+ typedef std::vector<BlindSpot> BlindSpots;
 
  private:
 
@@ -44,7 +48,8 @@ class MapserverStat : public Mapserver<mrpt::maps::COccupancyGridMap2D,
   ros::Publisher publisherIsmAsOgm;
   //! Publisher for sending the transformed ISM as point cloud
   ros::Publisher publisherIsmAsPointCloud;
-
+  //! List of blind spots which need to be removed for every ISM
+  BlindSpots blindSpots;
  public:
 
   ///
@@ -306,5 +311,20 @@ class MapserverStat : public Mapserver<mrpt::maps::COccupancyGridMap2D,
       std::cerr << idx <<  ": " << int(mrpt::maps::COccupancyGridMap2D::p2l(idx)) << "\n";
     }
   }
+
+  ///
+  /// \brief Reset the rectangular areas defined by the blind spot list to 0.5 probability
+  /// \param ogm The map to reset
+  /// \param pts List of blind spots
+  /// \param listenerTf A tf listener
+  ///
+  static void addBlindSpotsToOgm(nav_msgs::OccupancyGrid::ConstPtr ogm, const BlindSpots &pts, const tf::TransformListener &tfListener);
+
+  ///
+  /// \brief Parse the blind spots which are defined as a yaml list with prefix "blindspot" and data: [p1x, p1y, p2x, p2y, frame_id]
+  /// \param n The node handle
+  /// \param blindSpots The appended list with blind spots
+  ///
+  static void getBlindSpots(ros::NodeHandle &n, BlindSpots &blindSpots);
 
 };

@@ -83,6 +83,7 @@
     <param name="storage_format_name" value="" />
     <param name="storage_unit_name" value="logodds" />
     <param name="mapInit_value" type="int" value="0" />
+    <rosparam command="load" file="$(find mapserver)/yaml/blindspots.yaml" />
   </node>
 
  </launch>
