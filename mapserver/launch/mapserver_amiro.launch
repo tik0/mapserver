@@ -67,12 +67,12 @@
     <param name="req_topic_map_stack" type="string" value="/reqMapStack" />
     <param name="max_occupancy_update_certainty" value="255" />
     <param name="max_distance_insertion" value="10" />
-    <param name="ism_scope_prefix" type="string" value="/ism" />
+    <param name="ism_scope_prefix" type="string" value="amiro6/ism" />
     <param name="shift_map" type="int" value="1" />
     <param name="dont_store_maps" type="int" value="0" />
     <param name="debug" type="int" value="1" />
     <param name="debug_topic" value="/amiro6/ism/cam" />
-    <param name="debug_ism_topic" value="/ism/dummy" />
+    <param name="debug_ism_topic" value="/amiro6/ism/laser" />
     <param name="debug_draw_rpc_in_view" type="int" value="0" />
     <param name="max_x_m" value="$(eval arg('roi_width') / 2)" />
     <param name="max_y_m" value="$(eval arg('roi_height') / 2)" />
