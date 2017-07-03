@@ -709,7 +709,7 @@ Mapserver<TMapstack, TData, TValue, TChild>::Mapserver(ros::NodeHandle *nh)
       storageNameFormat(""),
       storageNameUnit("") {
 
-  n->getParam("topic_prefix", this->topicPrefix);
+  n->getParam("ism_scope_prefix", this->topicPrefix);
   n->getParam("tile_origin_tf_prefix", this->tileOriginTfPrefix);
   n->getParam("tile_origin_tf_sufix_for_roi_origin",
               this->tileOriginTfSufixForRoiOrigin);
