@@ -8,72 +8,7 @@
   <arg name="debug" default="false"/>
   <arg name="update_rate" default="50.0"/> <!--Update rate for tfs and gazebo plugins-->
 
-  
-  <!--We assume that the robot is centered in the ROI-->
-  <arg name="roi_width" value="6.0" /> <!-- (m) x -->
-  <arg name="roi_height" value="6.0" /> <!-- (m) y -->
-  <arg name="roi_altitude" value="0.0" /> <!-- (m) z NOT USED-->
-  
-  
-  <!-- Map server -->
-  <!-- This program produces tf'f from the tile_parent_tf to the center of the ROI ( These tf's
-   have the name from tile_origin_tf_prefix: e.g.: map_base_link_#). From here, another tf is produced
-   to a ROI origin for the maps ( For names tile_origin_tf_sufix_for_roi_origin are taken into
-   account: e.g. map_base_link_#_ROI_ORIGIN). As soon as the odometry_topic steps over the
-   bounding_box_*, a new ROI is produced and the number for the tf's "#" is increased.-->
-  <node pkg="mapserver" name="tile_publisher" type="tile_publisher" output="screen">
-    <param name="tile_origin_tf_prefix" type="string" value="map_base_link_" />
-    <param name="tile_origin_tf_sufix_for_roi_origin" type="string" value="_ROI_ORIGIN" />
-    <param name="tile_parent_tf" type="string" value="world" />
-    <param name="odometry_topic" type="string" value="/amiro6/odom" />
-    <param name="roi_too_origin_trans_width" value="$(eval -arg('roi_width') / 2)" />
-    <param name="roi_too_origin_trans_height" value="$(eval -arg('roi_height') / 2)" />
-    <param name="roi_too_origin_trans_altitude" value="$(eval -arg('roi_altitude') / 2)" />
-    <param name="bounding_box_width" value="$(eval arg('roi_width') / 3)" />
-    <param name="bounding_box_height" value="$(eval arg('roi_height') / 3)" />
-    <param name="bounding_box_altitude" value="$(eval arg('roi_altitude') / 3)" />
-  </node>
-
-<!--  <node pkg="mapserver" name="mapserver_raw" type="mapserver_raw">
-    world_link
-    <param name="world_link" type="string" value="world" />
-    <param name="tile_origin_tf_prefix" type="string" value="map_base_link_" />
-    <param name="tile_origin_tf_sufix_for_roi_origin" type="string" value="_ROI_ORIGIN" />
-    <param name="shift_map" type="int" value="1" />
-    <param name="topic_laser" type="string" value="amiro5/laser/scan" />
-    <param name="dont_store_maps" type="int" value="1" />
-    <param name="send_top_layer_of_distancestack_as_ogm" type="int" value="1" />
-    <param name="debug" type="int" value="0" />
-    <param name="debug_draw_rpc_in_view" type="int" value="0" />
-    <param name="max_x_m" value="$(eval arg('roi_width') / 2)" />
-    <param name="max_y_m" value="$(eval arg('roi_height') / 2)" />
-    <param name="min_x_m" value="$(eval -arg('roi_width') / 2)" />
-    <param name="min_y_m" value="$(eval -arg('roi_height') / 2)" />
-  </node>-->
-  
-  <node pkg="mapserver" name="mapserver_stat" type="mapserver_stat" respawn="true" output="screen">
-    <param name="tile_origin_tf_prefix" type="string" value="map_base_link_" />
-    <param name="tile_origin_tf_sufix_for_roi_origin" type="string" value="_ROI_ORIGIN" />
-    <param name="current_tf_name_topic" type="string" value="/currentTfTile" />
-    <param name="world_link" type="string" value="world" />
-    <param name="req_topic_map_stack" type="string" value="/reqMapStack" />
-    <param name="resolution" value="0.02" />
-    <param name="store_maps_topic" value="/store_maps" /> <!--Trigger this scope to store the current map-->
-    <param name="max_occupancy_update_certainty" value="0.8" />
-    <param name="max_distance_insertion" value="10" />
-    <param name="ism_scope_prefix" type="string" value="amiro6/ism" />
-    <param name="shift_map" type="int" value="1" />
-    <param name="dont_store_maps" type="int" value="0" />
-    <param name="debug" type="int" value="1" />
-    <param name="debug_topic" value="/amiro6/ism/cam" />
-    <param name="debug_draw_rpc_in_view" type="int" value="0" />
-    <param name="max_x_m" value="$(eval arg('roi_width') / 2)" />
-    <param name="max_y_m" value="$(eval arg('roi_height') / 2)" />
-    <param name="min_x_m" value="$(eval -arg('roi_width') / 2)" />
-    <param name="min_y_m" value="$(eval -arg('roi_height') / 2)" />
-    <param name="rate" value="10" />
-    <param name="map_storage_location" value="/tmp/" />
-  </node>
+  <include file="$(find mapserver)/launch/mapserver_amiro.launch" />
 
   <!-- The robots -->
   <!-- We resume the logic in empty_world.launch, changing only the name of the world to be launched -->
@@ -134,6 +69,20 @@
     <param name="upper_boundary" value="0.8"/>
     <param name="lower_boundary" value="0.2"/>
     <param name="fuzzy_intersection_m" value="0.02"/>
+    <param name="width" value="1.0"/>
+    <param name="depth" value="1.0"/>
+    <param name="base_frame_id" value="amiro6/base_link"/>
+    <param name="debug" value="0"/>
+  </node>
+  
+  <node name="ism_edge_detection" pkg="ism_plane_detection" type="ism_edge_detection">
+    <param name="laser_input_topic" value="/amiro6/laser/scan"/>
+    <param name="ogm_output_topic" value="/amiro6/ism/edge"/>
+    <param name="resolution" value="0.02"/>
+    <param name="upper_boundary_p" value="0.8"/>
+    <param name="lower_boundary_p" value="0.2"/>
+    <param name="upper_boundary_m" value="0.05"/>
+    <param name="lower_boundary_m" value="0.01"/>
     <param name="width" value="1.0"/>
     <param name="depth" value="1.0"/>
     <param name="base_frame_id" value="amiro6/base_link"/>
