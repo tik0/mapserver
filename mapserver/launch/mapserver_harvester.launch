@@ -37,6 +37,24 @@
     <param name="tf_tile_history" value="-1" />
   </node>
 
+  <node pkg="mapserver" name="mapserver_raw" type="mapserver_raw">
+    world_link
+    <param name="world_link" type="string" value="world" />
+    <param name="tile_origin_tf_prefix" type="string" value="map_base_link_" />
+    <param name="tile_origin_tf_sufix_for_roi_origin" type="string" value="_ROI_ORIGIN" />
+    <param name="shift_map" type="int" value="1" />
+    <param name="topic_data" type="string" value="amiro5/laser/scan" />
+    <param name="topic_data_is_point_cloud" type="int" value="0" />
+    <param name="dont_store_maps" type="int" value="1" />
+    <param name="send_top_layer_of_distancestack_as_ogm" type="int" value="1" />
+    <param name="debug" type="int" value="0" />
+    <param name="debug_draw_rpc_in_view" type="int" value="0" />
+    <param name="max_x_m" value="$(eval arg('roi_width') / 2)" />
+    <param name="max_y_m" value="$(eval arg('roi_height') / 2)" />
+    <param name="min_x_m" value="$(eval -arg('roi_width') / 2)" />
+    <param name="min_y_m" value="$(eval -arg('roi_height') / 2)" />
+  </node>
+  
 <?undefined
   <!--launch-prefix="gdb -ex run --args"-->
 ?>
