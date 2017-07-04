@@ -895,25 +895,9 @@ void MapserverStat::addBlindSpotsToOgm(
         ps4Src, ogm->header.frame_id, tfListener);
 
     ROS_DEBUG_STREAM(
-        std::setprecision(2) << "Blind spot poses [p1 -- p4] in "
-            << std::get<0>(*pt).frame_id_ << " frame : \n" << "[x: "
-            << ps1Src.getOrigin().getX() << ", y: " << ps1Src.getOrigin().getY()
-            << "]\n" << "[x: " << ps2Src.getOrigin().getX() << ", y: "
-            << ps2Src.getOrigin().getY() << "]\n" << "[x: "
-            << ps3Src.getOrigin().getX() << ", y: " << ps3Src.getOrigin().getY()
-            << "]\n" << "[x: " << ps4Src.getOrigin().getX() << ", y: "
-            << ps4Src.getOrigin().getY() << "]\n");
+        std::setprecision(2) << "Blind spot poses [p1 -- p4] in " << std::get<0>(*pt).frame_id_ << " frame : \n" << "[x: " << ps1Src.getOrigin().getX() << ", y: " << ps1Src.getOrigin().getY() << "]\n" << "[x: " << ps2Src.getOrigin().getX() << ", y: " << ps2Src.getOrigin().getY() << "]\n" << "[x: " << ps3Src.getOrigin().getX() << ", y: " << ps3Src.getOrigin().getY() << "]\n" << "[x: " << ps4Src.getOrigin().getX() << ", y: " << ps4Src.getOrigin().getY() << "]\n");
     ROS_DEBUG_STREAM(
-        std::setprecision(2) << "Blind spot poses [p1 -- p4] in "
-            << ogm->header.frame_id << " frame : \n" << "[x: "
-            << ps1Dst->getOrigin().getX() << ", y: "
-            << ps1Dst->getOrigin().getY() << "]\n" << "[x: "
-            << ps2Dst->getOrigin().getX() << ", y: "
-            << ps2Dst->getOrigin().getY() << "]\n" << "[x: "
-            << ps3Dst->getOrigin().getX() << ", y: "
-            << ps3Dst->getOrigin().getY() << "]\n" << "[x: "
-            << ps4Dst->getOrigin().getX() << ", y: "
-            << ps4Dst->getOrigin().getY() << "]\n");
+        std::setprecision(2) << "Blind spot poses [p1 -- p4] in " << ogm->header.frame_id << " frame : \n" << "[x: " << ps1Dst->getOrigin().getX() << ", y: " << ps1Dst->getOrigin().getY() << "]\n" << "[x: " << ps2Dst->getOrigin().getX() << ", y: " << ps2Dst->getOrigin().getY() << "]\n" << "[x: " << ps3Dst->getOrigin().getX() << ", y: " << ps3Dst->getOrigin().getY() << "]\n" << "[x: " << ps4Dst->getOrigin().getX() << ", y: " << ps4Dst->getOrigin().getY() << "]\n");
 
     // Draw if possible
     if (ps1Dst != NULL && ps2Dst != NULL && ps3Dst != NULL && ps4Dst != NULL) {
@@ -1131,8 +1115,7 @@ void MapserverStat::getBlindSpots(ros::NodeHandle &n, BlindSpots &blindSpots) {
     try {
       if (key->compare(0, n.getNamespace().size(), n.getNamespace()) != 0) {
         ROS_DEBUG_STREAM(
-            *key << " is not a parameter in the " << n.getNamespace()
-                << " namespace => continue");
+            *key << " is not a parameter in the " << n.getNamespace() << " namespace => continue");
         continue;
       }
     } catch (...) {
@@ -1183,11 +1166,7 @@ void MapserverStat::getBlindSpots(ros::NodeHandle &n, BlindSpots &blindSpots) {
             p2, ros::Time(0.0), static_cast<std::string>(blindSpotList[4]));
         BlindSpot pt = std::make_tuple(ps1, ps2);
         ROS_INFO_STREAM(
-            "Parsing: " << "[p1x: " << ps1.getOrigin().getX() << "], "
-                << "[p1y: " << ps1.getOrigin().getY() << "], " << "[p2x: "
-                << ps2.getOrigin().getX() << "], " << "[p2y: "
-                << ps2.getOrigin().getY() << "], " << "[frame_id: "
-                << ps1.frame_id_ << "]");
+            "Parsing: " << "[p1x: " << ps1.getOrigin().getX() << "], " << "[p1y: " << ps1.getOrigin().getY() << "], " << "[p2x: " << ps2.getOrigin().getX() << "], " << "[p2y: " << ps2.getOrigin().getY() << "], " << "[frame_id: " << ps1.frame_id_ << "]");
         blindSpots.push_back(pt);
       } catch (XmlRpc::XmlRpcException a) {
         std::cerr << "XmlRpc exception: " << a.getMessage() << std::endl;
@@ -1290,4 +1269,30 @@ void MapserverStat::fillMap(
 
 void* MapserverStat::getRawData(mrpt::maps::COccupancyGridMap2D *map) {
   return (void*) map->getRawMap().data();
+}
+
+void MapserverStat::mapStorage(
+    const std::shared_ptr<
+        std::map<std::string, mrpt::maps::COccupancyGridMap2D*>> &mapStack,
+    const std::string prefixString, const std::string formatString,
+    const std::string formatUnitString, const double resolution_meterPerTile,
+    const ros::Time timestamp) {
+
+  const std::shared_ptr<std::map<std::string, mrpt::maps::COccupancyGridMap2D*>> dummyMap;
+  const tf::StampedTransform dummyTf;
+  const mrpt::maps::COccupancyGridMap2D::cellType dummy = 0;
+
+  mapRefreshAndStorage(mapStack,                     // Map to shift/store/reset
+      dummyMap,                                 // Nothing at all
+      dummyTf,                                  // Transform
+      std::string("OGM"),                       // Kind of map
+      std::string(""),               // Format (empty: Take from type specifier)
+      std::string("logodds"),                   // Unit
+      resolution_meterPerTile,                  // Resolution per tile
+      true,                                     // Maps should be stored
+      false,                                    // Maps should be shifted
+      false,                                    // Map should be reseted reset
+      dummy,                                    // Some float value
+      false,                                 // Don't store the current position
+      std::string(""), timestamp);
 }

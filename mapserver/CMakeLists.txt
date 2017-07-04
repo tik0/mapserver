@@ -289,6 +289,11 @@ target_link_libraries(mapserver_stat_node
   mapserver_stat
 )
 
+add_executable(mapserver_mapstorage_trigger_node src/mapserver_storage_trigger.cpp)
+target_link_libraries(mapserver_mapstorage_trigger_node
+  ${catkin_LIBRARIES}
+)
+
 # Add the msg and srv generation as dependency
 add_dependencies(tile_publisher mapserver_gencpp)
 add_dependencies(mapserver_raw mapserver_gencpp)

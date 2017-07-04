@@ -24,6 +24,7 @@
 #include <rosapi/Topics.h>
 #include <std_msgs/String.h>
 #include <xmlrpcpp/XmlRpc.h>
+#include <roseus/StringStamped.h>
 
 #include <nav_msgs/OccupancyGrid.h>
 #include <geometry_msgs/PoseArray.h>
@@ -38,6 +39,9 @@
 #include <geometry_msgs/PointStamped.h>
 #include <tf/transform_broadcaster.h>
 #include <ros/duration.h>
+
+// Boost
+#include <boost/algorithm/string.hpp>
 
 // OpenCV
 #include <opencv2/opencv.hpp>
@@ -229,13 +233,16 @@ class Mapserver {
   virtual void mapStorage(
       const std::shared_ptr<std::map<std::string, TMapstack*>> &mapStack,
       const std::string prefixString, const std::string formatString,
-      const std::string formatUnitString, const double resolution_meterPerTile);
+      const std::string formatUnitString, const double resolution_meterPerTile,
+      const ros::Time timestamp = ros::Time::now()) {
+  }
+  ;
 
   ///
   /// \brief Store the current mapstack without shifting or swapping
   /// \param nameMsg Name of layer to store. Store all if string is empty
   ///
-  virtual void storeMaps(const std_msgs::String nameMsg);
+  virtual void storeMaps(const roseus::StringStamped nameMsg);
 
   ///
   /// \brief Swaps all necessary stacks (Needs to be redefined if )
@@ -613,54 +620,45 @@ bool Mapserver<TMapstack, TData, TValue, TChild>::referencesGoneWaiter(
 }
 
 template<typename TMapstack, typename TData, typename TValue, typename TChild>
-void Mapserver<TMapstack, TData, TValue, TChild>::mapStorage(
-    const std::shared_ptr<std::map<std::string, TMapstack*>> &mapStack,
-    const std::string prefixString, const std::string formatString,
-    const std::string formatUnitString, const double resolution_meterPerTile) {
-
-  const std::shared_ptr<std::map<std::string, TMapstack*>> dummyMap;
-  const tf::StampedTransform dummyTf;
-  const TValue dummy = 0.0;
-
-  mapRefreshAndStorage(mapStack,                     // Map to shift/store/reset
-      dummyMap,                                 // Nothing at all
-      dummyTf,                                  // Transform
-      std::string("OGM"),                       // Kind of map
-      std::string(""),               // Format (empty: Take from type specifier)
-      std::string("logodds"),                   // Unit
-      resolution_meterPerTile,                  // Resolution per tile
-      true,                                     // Maps should be stored
-      false,                                    // Maps should be shifted
-      false,                                    // Map should be reseted reset
-      dummy,                                    // Some float value
-      false);                                // Don't store the current position
-
-}
-
-template<typename TMapstack, typename TData, typename TValue, typename TChild>
 void Mapserver<TMapstack, TData, TValue, TChild>::storeMaps(
-    const std_msgs::String nameMsg) {
+    const roseus::StringStamped nameMsg) {
 
-  if (nameMsg.data.empty()) {
-    ROS_INFO("storeMaps: Store all maps");
-  } else {
-    // TODO Store maps defined in nameMsg
-  }
-
-  mapRefresh.lock();
+  // Let's just hold the mapstack, so that it does not goes suddenly out of reference
   std::string tileTfName = currentTileTfName;
-  auto mapStack = currentMapStack;
-  mapRefresh.unlock();
-
+  auto mapStackDummy = currentMapStack;
   if (currentTileTfName.empty()) {
     ROS_WARN("storeMaps: No current frame name available. Skipping storage");
     return;
   }
 
-  mapStorage(currentMapStack, storageNameMapKind,                 // Kind of map
-             storageNameFormat,      // Format (empty: Take from type specifier)
+  // Copying the mapstack like this is bad, but we want it fast
+  std::shared_ptr<std::map<std::string, TMapstack*>> mapStack;
+  if (nameMsg.data.empty()) {
+    ROS_INFO("storeMaps: Store all maps");
+    mapStack = currentMapStack;
+  } else {
+    mapStack = std::shared_ptr<std::map<std::string, TMapstack*>>(
+        new std::map<std::string, TMapstack*>);
+    // Expecting comma separated list of topics
+    std::vector<std::string> topics;
+    boost::split(topics, nameMsg.data, boost::is_any_of(","));
+    for (auto topic = topics.begin(); topic < topics.end(); ++topic) {
+      try {
+        mapStack->insert(
+            std::pair<std::string, TMapstack*>(*topic,
+                                               currentMapStack->at(*topic)));
+      } catch (...) {  // It only throws if the topic is not in the map
+        ROS_WARN_STREAM(
+            "storeMaps: Requested topic '" << *topic << "' not available");
+      }
+    }
+  }
+
+  mapStorage(mapStack, storageNameMapKind,                 // Kind of map
+             storageNameFormat,    // Format (empty: Take from type specifier)
              storageNameUnit,                       // Unit
-             resolution_mPerTile);                  // Resolution per tile
+             resolution_mPerTile,                   // Resolution per tile
+             nameMsg.header.stamp);
 }
 
 template<typename TMapstack, typename TData, typename TValue, typename TChild>

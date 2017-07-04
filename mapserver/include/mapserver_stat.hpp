@@ -6,8 +6,6 @@
 #define OCCUPANCY_GRIDMAP_CELL_SIZE 2
 #endif
 
-
-#include <boost/algorithm/string.hpp>
 #include "mapserver.hpp"
 #include <Constants.hpp>
 #include <nav_msgs/GridCells.h>
@@ -21,8 +19,8 @@ class MapserverStat : public Mapserver<mrpt::maps::COccupancyGridMap2D,
     nav_msgs::OccupancyGrid, mrpt::maps::COccupancyGridMap2D::cellType,
     MapserverStat> {
 
- typedef std::tuple<tf::Stamped<tf::Pose>, tf::Stamped<tf::Pose>> BlindSpot;
- typedef std::vector<BlindSpot> BlindSpots;
+  typedef std::tuple<tf::Stamped<tf::Pose>, tf::Stamped<tf::Pose>> BlindSpot;
+  typedef std::vector<BlindSpot> BlindSpots;
 
  private:
 
@@ -62,7 +60,8 @@ class MapserverStat : public Mapserver<mrpt::maps::COccupancyGridMap2D,
   /// \brief The destructor
   ///
   virtual ~MapserverStat() {
-  };
+  }
+  ;
 
   ///
   /// \brief Returns the data pointer of the map
@@ -188,7 +187,6 @@ class MapserverStat : public Mapserver<mrpt::maps::COccupancyGridMap2D,
       const nav_msgs::OccupancyGrid::ConstPtr ismRos, const double targetRes =
           -1/*meter/tile*/);
 
-
   // Get topic name with callback: http://answers.ros.org/question/68434/get-topic-name-in-callback/?answer=68545#post-id-68545
   // Using bind function: http://en.cppreference.com/w/cpp/utility/functional/bind
   ///
@@ -201,7 +199,6 @@ class MapserverStat : public Mapserver<mrpt::maps::COccupancyGridMap2D,
   nav_msgs::OccupancyGrid getIsmOutput(
       const mapserver_msgs::mapPrimitive &view,
       const mrpt::maps::COccupancyGridMap2D &input);
-
 
   ///
   /// \brief Send a list formated maps
@@ -230,7 +227,6 @@ class MapserverStat : public Mapserver<mrpt::maps::COccupancyGridMap2D,
   void addMapToResponse(const std::string &name,
                         mrpt::maps::COccupancyGridMap2D* map,
                         mapserver::ismStackFloat::Response &response);
-
 
   ///
   /// \brief Requesting the maps stack with float values
@@ -305,10 +301,11 @@ class MapserverStat : public Mapserver<mrpt::maps::COccupancyGridMap2D,
       std::cerr << "int16_t";
     }
     std::cerr << ":\n";
-    std::cerr.setf( std::ios::fixed, std:: ios::floatfield );
+    std::cerr.setf(std::ios::fixed, std::ios::floatfield);
     std::cerr.precision(precision);
     for (float idx = 0.0f; idx <= 1.0f; idx = idx + increment) {
-      std::cerr << idx <<  ": " << int(mrpt::maps::COccupancyGridMap2D::p2l(idx)) << "\n";
+      std::cerr << idx << ": " << int(mrpt::maps::COccupancyGridMap2D::p2l(idx))
+                << "\n";
     }
   }
 
@@ -318,7 +315,9 @@ class MapserverStat : public Mapserver<mrpt::maps::COccupancyGridMap2D,
   /// \param pts List of blind spots
   /// \param listenerTf A tf listener
   ///
-  static void addBlindSpotsToOgm(nav_msgs::OccupancyGrid::ConstPtr ogm, const BlindSpots &pts, const tf::TransformListener &tfListener);
+  static void addBlindSpotsToOgm(nav_msgs::OccupancyGrid::ConstPtr ogm,
+                                 const BlindSpots &pts,
+                                 const tf::TransformListener &tfListener);
 
   ///
   /// \brief Parse the blind spots which are defined as a yaml list with prefix "blindspot" and data: [p1x, p1y, p2x, p2y, frame_id]
@@ -326,5 +325,15 @@ class MapserverStat : public Mapserver<mrpt::maps::COccupancyGridMap2D,
   /// \param blindSpots The appended list with blind spots
   ///
   static void getBlindSpots(ros::NodeHandle &n, BlindSpots &blindSpots);
+
+  ///
+  /// \brief Simplified wrapper function for mapRefreshAndStorage()
+  ///
+  virtual void mapStorage(
+      const std::shared_ptr<
+          std::map<std::string, mrpt::maps::COccupancyGridMap2D*>> &mapStack,
+      const std::string prefixString, const std::string formatString,
+      const std::string formatUnitString, const double resolution_meterPerTile,
+      const ros::Time timestamp = ros::Time::now());
 
 };
