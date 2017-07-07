@@ -52,6 +52,7 @@ add_message_files(
   InverseSensorModelFloat.msg
   StringArray.msg
   pnsTuple.msg
+  StringStamped.msg
 )
 
 ## Generate services in the 'srv' folder

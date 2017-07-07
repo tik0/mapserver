@@ -8,7 +8,7 @@
 //#include <mapserver/rsm.h>
 //#include <tf_conversions/tf_eigen.h>
 //#include <rosapi/Topics.h>
-#include <roseus/StringStamped.h>
+#include <mapserver_msgs/StringStamped.h>
 #include <xmlrpcpp/XmlRpc.h>
 
 int main(int argc, char **argv) {
@@ -46,8 +46,8 @@ int main(int argc, char **argv) {
     timestamps.resize(0);
   }
 
-  publisher = n.advertise < roseus::StringStamped > (triggerTopic, 1);
-  roseus::StringStamped msg;
+  publisher = n.advertise < mapserver_msgs::StringStamped > (triggerTopic, 1);
+  mapserver_msgs::StringStamped msg;
   msg.data = topicsCsv;
 
   std::size_t idx = 0;

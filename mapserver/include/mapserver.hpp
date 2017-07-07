@@ -24,7 +24,7 @@
 #include <rosapi/Topics.h>
 #include <std_msgs/String.h>
 #include <xmlrpcpp/XmlRpc.h>
-#include <roseus/StringStamped.h>
+#include <mapserver_msgs/StringStamped.h>
 
 #include <nav_msgs/OccupancyGrid.h>
 #include <geometry_msgs/PoseArray.h>
@@ -242,7 +242,7 @@ class Mapserver {
   /// \brief Store the current mapstack without shifting or swapping
   /// \param nameMsg Name of layer to store. Store all if string is empty
   ///
-  virtual void storeMaps(const roseus::StringStamped nameMsg);
+  virtual void storeMaps(const mapserver_msgs::StringStamped nameMsg);
 
   ///
   /// \brief Swaps all necessary stacks (Needs to be redefined if )
@@ -621,7 +621,7 @@ bool Mapserver<TMapstack, TData, TValue, TChild>::referencesGoneWaiter(
 
 template<typename TMapstack, typename TData, typename TValue, typename TChild>
 void Mapserver<TMapstack, TData, TValue, TChild>::storeMaps(
-    const roseus::StringStamped nameMsg) {
+    const mapserver_msgs::StringStamped nameMsg) {
 
   // Let's just hold the mapstack, so that it does not goes suddenly out of reference
   std::string tileTfName = currentTileTfName;
