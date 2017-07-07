@@ -7,6 +7,7 @@
   <arg name="headless" default="false"/>
   <arg name="debug" default="false"/>
   <arg name="update_rate" default="50.0"/> <!--Update rate for tfs and gazebo plugins-->
+  <arg name="world_name" default="$(find amiro_gazebo)/worlds/desk.world"/> <!--Gazebo world to load-->
 
   <include file="$(find mapserver)/launch/mapserver_amiro.launch" />
 
@@ -14,7 +15,7 @@
   <!-- We resume the logic in empty_world.launch, changing only the name of the world to be launched -->
   <include file="$(find amiro_gazebo)/launch/gazebo.launch">
 <!--     <arg name="world_name" value="$(find amiro_gazebo)/worlds/empty_slow.world"/> -->
-    <arg name="world_name" value="$(find amiro_gazebo)/worlds/desk.world"/>
+    <arg name="world_name" value="$(arg world_name)"/>
 <!--     <arg name="world_name" value="$(find amiro_gazebo)/worlds/amiro.world"/> -->
     <arg name="debug" value="$(arg debug)" />
     <arg name="gui" value="$(arg gui)" />
@@ -30,6 +31,7 @@
     <arg name="update_rate" value="$(arg update_rate)" />
     <arg name="robot_model" value="amiro_camera_hokuyo.xacro" />
     <arg name="lid_sensor_pitch" value="0.785" />
+    <arg name="use_gpu_laser" value="true" />
   </include>
 
   <!-- Start rviz -->
