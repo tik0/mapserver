@@ -1,4 +1,4 @@
-# Single scan from a 3D Velodyne VLP16 range-finder
+# The map primitive is used to request the desired view
 
 Header                       header
 

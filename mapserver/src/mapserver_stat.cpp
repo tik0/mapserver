@@ -1039,6 +1039,175 @@ bool MapserverStat::mapStatServerMapStack(
   return true;
 }
 
+std::shared_ptr<mrpt::maps::COccupancyGridMap2D> MapserverStat::maxPooling(
+    std::shared_ptr<std::map<std::string, mrpt::maps::COccupancyGridMap2D*>> maps) {
+  // Allocate the result and copy the first map
+  std::shared_ptr<mrpt::maps::COccupancyGridMap2D> map = std::shared_ptr<
+      mrpt::maps::COccupancyGridMap2D>(new mrpt::maps::COccupancyGridMap2D);
+  *map = *(maps->begin()->second);
+  for (auto it = ++maps->begin(); it != maps->end(); ++it) {
+    ROS_ASSERT(map->getRawMap().size() != map->getRawMap().size());
+    for (size_t idx = 0; idx < map->getRawMap().size(); ++idx) {
+      const_cast<std::vector<mrpt::maps::COccupancyGridMap2D::cellType>&>(map
+          ->getRawMap()).at(idx) = std::max(map->getRawMap().at(idx),
+                                            it->second->getRawMap().at(idx));
+    }
+  }
+  return map;
+}
+
+std::shared_ptr<mrpt::maps::COccupancyGridMap2D> MapserverStat::multiPooling(
+    std::shared_ptr<std::map<std::string, mrpt::maps::COccupancyGridMap2D*>> maps) {
+  // Allocate the result and copy the first map
+  std::shared_ptr<mrpt::maps::COccupancyGridMap2D> map = std::shared_ptr<
+      mrpt::maps::COccupancyGridMap2D>(new mrpt::maps::COccupancyGridMap2D);
+  *map = *(maps->begin()->second);
+  for (auto it = ++maps->begin(); it != maps->end(); ++it) {
+    ROS_ASSERT(map->getRawMap().size() != map->getRawMap().size());
+    for (size_t idy = 0; idy < map->getSizeY(); ++idy) {
+      for (size_t idx = 0; idx < map->getSizeX(); ++idx) {
+        map->updateCell(idx, idy, it->second->getCell(idx, idy));
+      }
+    }
+  }
+  return map;
+}
+
+bool MapserverStat::mapStatServerSingleLayerOgm(mapserver::ism::Request &req,
+                                                mapserver::ism::Response &res) {
+
+  // !!! Treat all requests in the base_link frame of the map !!!
+  // TODO Fix this!!!
+  const std::string frameId("base_link");  // should be req.request.header.frame_id
+  mapRefresh.lock();
+  auto mapStack = currentMapStack;
+  std::string tileName = currentTileTfName;
+  mapRefresh.unlock();
+
+  // Perform sanity checks
+  // Rules: There can be two "actions": multi-opinion pooling "multi" or max pooling "max" between layers
+  // Action can only be performed, iff the req_info field holds multiple comma-seperated maps
+  const std::vector<std::string> actionsAvailable = { "multi", "max" };
+  std::shared_ptr<mrpt::maps::COccupancyGridMap2D> map;
+  auto it = actionsAvailable.begin();
+  std::shared_ptr<std::map<std::string, mrpt::maps::COccupancyGridMap2D*>> reqMaps =
+      std::shared_ptr<std::map<std::string, mrpt::maps::COccupancyGridMap2D*>>(
+          new std::map<std::string, mrpt::maps::COccupancyGridMap2D*>);
+  std::vector<std::string> topics;
+  if (!req.request.action.empty()) {  // Perform pooling and return a single layer map
+    // CHeck if action is available
+    for (; it != actionsAvailable.end(); ++it) {
+      req.request.action.compare(*it);
+    }
+    if (it == actionsAvailable.end()) {
+      ROS_ERROR_STREAM(
+          "mapStatServerSingleLayerOgm: No available action: " << req.request.action << "\n");
+      return false;
+    }
+
+    // Check if the req_info holds a CSV list of at least two available maps
+    boost::split(topics, req.request.req_info, boost::is_any_of(","));
+    for (auto topic = topics.begin(); topic < topics.end(); ++topic) {
+      auto it = mapStack->find(*topic);
+      if (it == mapStack->end()) {
+        ROS_ERROR_STREAM( "mapStatServerSingleLayerOgm: Unknown map identifier: " << *topic << "\n");
+        return false;
+      } else {
+        reqMaps->insert(std::make_pair(it->first, it->second));
+      }
+    }
+    // Apply the pooling
+    // TODO Use function look up in actionsAvailable
+    if (req.request.action.compare("multi") == 0) {
+      map = multiPooling(reqMaps);
+    } else if (req.request.action.compare("max") == 0) {
+      map = maxPooling(reqMaps);
+    }
+  } else {  // Copy the single requested map
+    auto it = mapStack->find(req.request.req_info);
+    if (it == mapStack->end()) {
+      ROS_ERROR_STREAM(
+          "mapStatServerSingleLayerOgm: Unknown map identifier: " << req.request.req_info << "\n");
+      return false;
+    } else {
+      map = std::shared_ptr<mrpt::maps::COccupancyGridMap2D>(
+          new mrpt::maps::COccupancyGridMap2D);
+      *map = *(it->second);
+    }
+  }
+
+  // Get the requested view
+  try {
+    // Get the map as an image
+    std::shared_ptr<cv::Mat> src = mrptOggToGrayScale(*map);
+
+    // Request the current odometry
+    tf::StampedTransform transformedViewInRoi;
+    try {
+      listenerTf->waitForTransform(tileName, std::string("base_link"),
+                                   ros::Time(0), ros::Duration(3.0));
+      listenerTf->lookupTransform(tileName, std::string("base_link"),
+                                  ros::Time(0), transformedViewInRoi);
+      ROS_DEBUG("mapStatServerSingleLayerOgm: abs(x,y,z): %f",
+                transformedViewInRoi.getOrigin().length());
+    } catch (const std::exception &exc) {
+      const std::string excStr(exc.what());
+      ROS_ERROR("%s", excStr.c_str());
+      throw std::runtime_error(
+          std::string(
+              "mapStatServerSingleLayerOgm: Won't perform any tf without valid machine model"));
+    }
+
+    // Get the desired rotation
+    tf::Matrix3x3 m(transformedViewInRoi.getRotation());
+    double rollMachine, pitchMachine, yawMachine;
+    m.getRPY(rollMachine, pitchMachine, yawMachine);
+    Eigen::Matrix4d roi_machineRoi = ctf::trans<double>(
+        transformedViewInRoi.getOrigin().getX(),
+        transformedViewInRoi.getOrigin().getY(), 0.0)
+        * ctf::rotZ<double>(yawMachine);
+
+    // Request the view
+    cv::Mat dst;
+    utils::cutView(*src, dst, resolution_mPerTile /*m/px*/,
+                   req.request.pose.pose.position.x,
+                   req.request.pose.pose.position.y,
+                   req.request.width * req.request.resolution,
+                   req.request.depth * req.request.resolution, yawMachine,
+                   roi_machineRoi, src->type());
+
+    // Resize the resolution
+    // TODO Check if all the other do the same
+    cv::Size size(req.request.width, req.request.depth);
+    if (req.request.resolution > map->getResolution()) { // Downscaling
+      // Do averaging over pixel (INTER_AREA should be the desired method for
+      // down scaling regarding https://stackoverflow.com/questions/29572347/interpolation-for-smooth-downscale-of-image-in-opencv)
+      cv::resize(dst, dst, size, 0, 0, cv::INTER_AREA);
+    } else { // Upscaling
+      cv::resize(dst, dst, size, 0, 0, cv::INTER_NEAREST);
+    }
+
+    // Copy the meta information
+    res.response.header.frame_id = frameId;
+    res.response.info.width = dst.cols;
+    res.response.info.height = dst.rows;
+    res.response.info.resolution = req.request.resolution;
+    const int arraySize = dst.cols * dst.rows;
+    res.response.data.resize(arraySize);
+
+    // Copy the payload
+    // TODO replace by memcpy if memory is not fragmented
+    for (int idx = 0; idx < arraySize; ++idx) {
+      res.response.data.at(idx) = dst
+          .at<mrpt::maps::COccupancyGridMap2D::cellType>(idx);
+    }
+  } catch (...) {
+    ROS_ERROR_STREAM("mapStatServerSingleLayerOgm: Something happened");
+    return false;
+  }
+  return true;
+}
+
 MapserverStat::MapserverStat(ros::NodeHandle& nh)
     : Mapserver(&nh),
       n(nh) {
@@ -1101,6 +1270,10 @@ MapserverStat::MapserverStat(ros::NodeHandle& nh)
       n.advertiseService(
           reqTopicMapStack/*scopes::map::statServer::parent + s + scopes::map::statServer::requests::mapStack*/,
           &MapserverStat::mapStatServerMapStack, this);
+  service_singleLayerOgm = n.advertiseService(
+      scopes::map::ogmServer::parent + s
+          + scopes::map::ogmServer::requests::singleLayerOgm,
+      &MapserverStat::mapStatServerSingleLayerOgm, this);
 }
 
 void MapserverStat::getBlindSpots(ros::NodeHandle &n, BlindSpots &blindSpots) {

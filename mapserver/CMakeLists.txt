@@ -87,6 +87,7 @@ find_package(Boost REQUIRED COMPONENTS)
 add_service_files(
   FILES
   rsm.srv
+  ism.srv
   ismStackFloat.srv
 )
 

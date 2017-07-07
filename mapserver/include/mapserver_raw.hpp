@@ -97,7 +97,10 @@ class MapserverRaw : public Mapserver<short, nav_msgs::OccupancyGrid, short,
       const std::string prefixString, const std::string formatString,
       const std::string formatUnitString, const double resolution_meterPerTile,
       const bool storeMapStack, const bool shiftMapStack,
-      const bool clearMapStack, T fillValue = numerics::invalidValue_int16);
+      const bool clearMapStack, T fillValue = numerics::invalidValue_int16,
+      bool storeCurrentPosition = true /*unused*/,
+      std::string additionalInformationString = std::string(""),
+      ros::Time storageTime = ros::Time::now());
 
   ///
   /// \brief Transforms the received laser messages into the map frame and stores them in the next free map layer
@@ -269,88 +272,13 @@ class MapserverRaw : public Mapserver<short, nav_msgs::OccupancyGrid, short,
   /// \brief Store the current tf tile name
   /// \param nameMsg Name of the current tile tf
   ///
-  void tfTileNameHandler(const std_msgs::String nameMsg) {
-    bool currentTileTfNameChange = false;
-    mtxSwap.lock();
-    if ((nameMsg.data.back() != currentTileTfName.back())) {
-      if (currentTileTfName.empty()) {
-        // First round, we bootstrap
-        currentTileTfName = nameMsg.data;
-      } else {
-        std::swap(currentMapHeight_mm, lastMapHeight_mm);
-        std::swap(currentPulsewidth_ps, lastPulsewidth_ps);
-        std::swap(currentMapIterator, lastMapIterator);
-        lastTileTfName = currentTileTfName;
-        currentTileTfName = nameMsg.data;
-        currentTileTfNameChange = true;
-      }
-    }
+  virtual void tfTileNameHandler(const std_msgs::String nameMsg);
 
-    if (currentTileTfNameChange) {
-      tf::StampedTransform transformRoiInWorld;
-      try {
-        listenerTf->waitForTransform(lastTileTfName, worldLink, ros::Time(0.0),
-                                     ros::Duration(3.0));
-        listenerTf->lookupTransform(lastTileTfName, worldLink, ros::Time(0.0),
-                                    transformRoiInWorld);
-      } catch (const std::exception &exc) {
-        const std::string excStr(exc.what());
-        ROS_ERROR("tfTileNameHandler: %s", excStr.c_str());
-        mtxSwap.unlock();
-        return;
-      }
-      ROS_DEBUG("NEW MAP");
-
-      // Wait until all references are gone
-      std::size_t lockCnt = 0;
-      const std::size_t lockCntMax = 200000;  // 2 seconds if we sleep for 10 us
-
-      const bool clearMap = !shiftMap;
-      while ((!(lastMapHeight_mm.unique() && lastPulsewidth_ps.unique()
-          && lastMapIterator.unique()) && !clearMap)  // The last map is hold by another process, but we don't care if we don't clear it
-          || !(currentMapHeight_mm.unique() && currentPulsewidth_ps.unique()
-              && currentMapIterator.unique()) && !bool(shiftMap)) {  // The current map needs to be filled with the old values if shifted, but we don't care if we don't shift it
-        usleep(10);
-        if (++lockCnt > lockCntMax) {
-          ROS_ERROR(
-              "tfTileNameHandler: Locked for to long, skip storage (maybe deadlock or out if resources?)");
-          mtxSwap.unlock();
-          return;
-        }
-      }
-
-      mapRefreshAndStorage(lastMapHeight_mm, currentMapHeight_mm,
-                           transformRoiInWorld, std::string("height"),
-                           std::string(""), std::string("mm"),
-                           resolution_mPerTile, !dontStoreMaps, bool(shiftMap),
-                           clearMap, numerics::invalidValue_int16);
-      mapRefreshAndStorage(lastPulsewidth_ps,        // Map to shift/store/reset
-          currentPulsewidth_ps,                 // The result of the shifted map
-          transformRoiInWorld,                   // Transform
-          std::string("pulsewidth"),             // Kind of map
-          std::string(""),           // Format (empty: Take from type specifier)
-          std::string("ps"),                     // Unit
-          resolution_mPerTile,               // Tile resolution
-          !dontStoreMaps,                       // Info if maps should be stored
-          bool(shiftMap),                      // Info if maps should be shifted
-          clearMap,      // If map is not shifted, reset the content of mapStack
-          numerics::invalidValue_int16);     // Fill-up value
-      mapRefreshAndStorage(lastMapIterator,          // Map to shift/store/reset
-          currentMapIterator,                   // The result of the shifted map
-          transformRoiInWorld,                   // Transform
-          std::string("mapiterator"),            // Kind of map
-          std::string(""),           // Format (empty: Take from type specifier)
-          std::string("1"),                      // Unit
-          resolution_mPerTile,               // Tile resolution
-          false,                                // Info if maps should be stored
-          bool(shiftMap),                      // Info if maps should be shifted
-          clearMap,      // If map is not shifted, reset the content of mapStack
-          0);                                    // Fill-up value
-    }
-
-    mtxSwap.unlock();
-
-  }
+  ///
+  /// \brief Store the current tf tile name and swap the storage
+  /// \param msg tuple of position, NavSat, and name name of the current tile tf
+  ///
+  virtual void tupleHandler(const mapserver_msgs::pnsTuple msg);
 
   ///
   /// \brief Shows the current RPC if debug is on

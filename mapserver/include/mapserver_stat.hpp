@@ -9,6 +9,7 @@
 #include "mapserver.hpp"
 #include <Constants.hpp>
 #include <nav_msgs/GridCells.h>
+#include <mapserver/ism.h>
 #include <utils.h>
 
 using namespace constants;
@@ -42,6 +43,8 @@ class MapserverStat : public Mapserver<mrpt::maps::COccupancyGridMap2D,
   std::string debugIsmTopic;
   //! The mapstack service
   ros::ServiceServer service_mapStack;
+  //! The mapstack service for single layers
+  ros::ServiceServer service_singleLayerOgm;
   //! Publisher for sending the transformed ISM as occupancy grid message
   ros::Publisher publisherIsmAsOgm;
   //! Publisher for sending the transformed ISM as point cloud
@@ -98,6 +101,20 @@ class MapserverStat : public Mapserver<mrpt::maps::COccupancyGridMap2D,
   std::shared_ptr<tf::Stamped<tf::Pose>> getPoseInFrame(
       const tf::Stamped<tf::Pose> &poseInSourceFrame,
       const std::string &targetFrame, const tf::TransformListener &tfListener);
+
+  ///
+  /// \brief Performs a max pooling on the given map stack
+  /// \param map The map stack
+  /// \return The allocated max-pooled result
+  ///
+  std::shared_ptr<mrpt::maps::COccupancyGridMap2D> maxPooling(std::shared_ptr<std::map<std::string, mrpt::maps::COccupancyGridMap2D*>> maps);
+
+  ///
+  /// \brief Performs a multi-opinion pooling on the given map stack
+  /// \param map The map stack
+  /// \return The allocated multi-opinion-pooled result
+  ///
+  std::shared_ptr<mrpt::maps::COccupancyGridMap2D> multiPooling(std::shared_ptr<std::map<std::string, mrpt::maps::COccupancyGridMap2D*>> maps);
 
   ///
   /// \brief Calculate the metric coordinates of OGM cell centroids in the target frame
@@ -229,13 +246,22 @@ class MapserverStat : public Mapserver<mrpt::maps::COccupancyGridMap2D,
                         mapserver::ismStackFloat::Response &response);
 
   ///
-  /// \brief Requesting the maps stack with float values
+  /// \brief Requesting the map stack with float values
   /// \param req The request
   /// \param res The response
   /// \return True if response was successful
   ///
   bool mapStatServerMapStack(mapserver::ismStackFloat::Request &req,
                              mapserver::ismStackFloat::Response &res);
+
+  ///
+  /// \brief Requesting a single map stack with float values
+  /// \param req The request
+  /// \param res The response
+  /// \return True if response was successful
+  ///
+  bool mapStatServerSingleLayerOgm(mapserver::ism::Request &req,
+                                   mapserver::ism::Response &res);
 
   ///
   /// \brief The spinning realization for this class

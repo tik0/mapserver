@@ -23,3 +23,9 @@ geometry_msgs/PoseStamped pose
 # Requested meter per grid tile
 # Values smaller than 0 are interpreted as original resolution
 float32 resolution
+
+# Additional request information
+string req_info
+
+# Action to perform on the data
+string action

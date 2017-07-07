@@ -177,19 +177,19 @@ class Mapserver {
   static void getMapInitValue(const std::string paramName, TValue &mapInitValue,
                               ros::NodeHandle *n);
 
- private:
-
   ///
   /// \brief Store the current tf tile name and swap the storage
   /// \param nameMsg Name of the current tile tf
   ///
-  void tfTileNameHandler(const std_msgs::String nameMsg);
+  virtual void tfTileNameHandler(const std_msgs::String nameMsg);
 
   ///
   /// \brief Store the current tf tile name and swap the storage
   /// \param msg tuple of position, NavSat, and name name of the current tile tf
   ///
-  void tupleHandler(const mapserver_msgs::pnsTuple msg);
+  virtual void tupleHandler(const mapserver_msgs::pnsTuple msg);
+
+ private:
 
   ///
   /// \brief Polling to check if all references on the mapstacks are gone (Waits 2 seconds in standard configuration)

@@ -1,0 +1,3 @@
+mapserver_msgs/mapPrimitive request
+---
+nav_msgs/OccupancyGrid response
