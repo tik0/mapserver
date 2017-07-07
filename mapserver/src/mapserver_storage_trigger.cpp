@@ -57,7 +57,8 @@ int main(int argc, char **argv) {
       ros::Duration duration(currentTimestamp - ros::Time::now());
       if (duration > ros::Duration(0.0) || debug) {
         if (!debug) {
-          duration.sleep();
+          ROS_DEBUG_STREAM("Sleep until " << currentTimestamp << " from now " << ros::Time::now());
+          ros::Time::sleepUntil(currentTimestamp);
         }
         msg.header.stamp = currentTimestamp;
         publisher.publish(msg);
