@@ -17,7 +17,7 @@
 
 //Claas
 #include <mapserver_msgs/mapPrimitive.h>
-#include <mapserver/rsm.h>
+#include <mapserver/ism.h>
 
 using namespace constants;
 
@@ -39,8 +39,8 @@ static std::string serviceName = "";
 
 void callService() {
   // Fill the request
-  mapserver::rsm::Request req;
-  mapserver::rsm::Response res;
+  mapserver::ism::Request req;
+  mapserver::ism::Response res;
 
   //Fill request for map server
   req.request.frame_id = frameId;
@@ -52,6 +52,8 @@ void callService() {
   req.request.pose.pose.position.y = transY_m;
   req.request.pose.pose.position.z = transZ_m;
   req.request.resolution = resolution_meterPerTile;
+  req.request.action = std::string(""); // can be multi or max
+  req.request.req_info = std::string("/ism/stock");
 
   tf::Quaternion q;
   double roll = 0.0, pitch = 0.0, yaw = yaw_deg * constants::deg2rad;
@@ -65,32 +67,9 @@ void callService() {
   ROS_INFO("Call mapserver service");
   if (client.call(req, res)) {
     ROS_INFO("SUCCESS\n");
-    ROS_INFO("RPC: rows=%i, cols=%i", res.response.rows, res.response.cols);
+    ROS_INFO("RPC: rows=%i, cols=%i", res.response.info.height, res.response.info.width);
 
-    cv::Mat img = cv::Mat::zeros(res.response.rows, res.response.cols, CV_8UC3);
-
-    //Convert response from map server to cv image
-    for (int j = 0; j < res.response.cols; j++) {
-      for (int i = 0; i < res.response.rows; i++) {
-        const int idx = (j) + (i) * res.response.cols;
-
-        const float resVal = res.response.map[idx];
-
-        uint16_t val = 0;
-
-        if (resVal >= 0.0f
-            && resVal != constants::numeric::invalidValue_float) {
-          val = static_cast<uint16_t>(resVal) + 1;
-        } else {
-          // val=0;
-        }
-
-        const cv::Vec3b color(static_cast<uchar>(val & 0xFF),
-                              static_cast<uchar>(val >> 8),
-                              static_cast<uchar>(0));
-        img.at<cv::Vec3b>(i, j) = color;
-      }
-    }
+    cv::Mat img = cv::Mat(res.response.info.height, res.response.info.width, CV_8SC1, res.response.data.data());
 
     // Show the RPC as image
     std::stringstream os;
@@ -110,7 +89,7 @@ void callService() {
  * rosrun mapserver mapserver_raw_rpc_test _req_service_name:=/rawServer/variancePulsewidth
  */
 int main(int argc, char **argv) {
-  ros::init(argc, argv, "mapserver_raw_rpc_test");
+  ros::init(argc, argv, "mapserver_raw_stat_test");
   ros::NodeHandle node("~");
   node.param<double>("rate", rate, 1.0);
   node.param<double>("req_yaw_deg", yaw_deg, 0.0);
@@ -127,11 +106,11 @@ int main(int argc, char **argv) {
   node.param<std::string>(
       "req_service_name",
       serviceName,
-      constants::scopes::map::rawServer::parent + std::string("/")
-          + constants::scopes::map::rawServer::requests::meanHeight);
+      constants::scopes::map::ogmServer::parent + std::string("/")
+          + constants::scopes::map::ogmServer::requests::singleLayerOgm);
 
-  //Get rawmapserver service
-  client = node.serviceClient<mapserver::rsm>(serviceName);
+  //Get mapserver service
+  client = node.serviceClient<mapserver::ism>(serviceName);
 
   ros::Rate _rate(rate);
   while (ros::ok()) {

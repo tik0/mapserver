@@ -1,6 +1,6 @@
 #ifndef UTILS_H
 #define UTILS_H
-#endif // UTILS_H nedds to be here, because it strongly depends on what you have included before
+#endif // UTILS_H needs to be here, because it strongly depends on what you have included before
 
 // RSB
 #if defined RSB_EXPORT
@@ -520,8 +520,8 @@ const Eigen::Matrix4d &roi_machineRoi, int targetFormat = int(CV_32F)) {
 cv::RotatedRect rectView;
 const double xView = xTranslation_m;  // Meter
 const double yView = yTranslation_m;// Meter
-const double wView = width_m < srcResolution ? srcResolution : width_m;// Meter
-const double hView = height_m < srcResolution ? srcResolution : height_m;// Meter
+const double wView = width_m; // Meter
+const double hView = height_m;// Meter
 const double zRotView = zRotation_rad;// rad
 
 Eigen::Matrix4d machineRoi_view = ctf::trans<double>(xView, yView, 0.0) * ctf::rotZ<double>(zRotView);
@@ -769,7 +769,6 @@ return 0;
 }
 
 #endif
-
+}
 }
 
-}

@@ -895,9 +895,25 @@ void MapserverStat::addBlindSpotsToOgm(
         ps4Src, ogm->header.frame_id, tfListener);
 
     ROS_DEBUG_STREAM(
-        std::setprecision(2) << "Blind spot poses [p1 -- p4] in " << std::get<0>(*pt).frame_id_ << " frame : \n" << "[x: " << ps1Src.getOrigin().getX() << ", y: " << ps1Src.getOrigin().getY() << "]\n" << "[x: " << ps2Src.getOrigin().getX() << ", y: " << ps2Src.getOrigin().getY() << "]\n" << "[x: " << ps3Src.getOrigin().getX() << ", y: " << ps3Src.getOrigin().getY() << "]\n" << "[x: " << ps4Src.getOrigin().getX() << ", y: " << ps4Src.getOrigin().getY() << "]\n");
+        std::setprecision(2) << "Blind spot poses [p1 -- p4] in "
+            << std::get<0>(*pt).frame_id_ << " frame : \n" << "[x: "
+            << ps1Src.getOrigin().getX() << ", y: " << ps1Src.getOrigin().getY()
+            << "]\n" << "[x: " << ps2Src.getOrigin().getX() << ", y: "
+            << ps2Src.getOrigin().getY() << "]\n" << "[x: "
+            << ps3Src.getOrigin().getX() << ", y: " << ps3Src.getOrigin().getY()
+            << "]\n" << "[x: " << ps4Src.getOrigin().getX() << ", y: "
+            << ps4Src.getOrigin().getY() << "]\n");
     ROS_DEBUG_STREAM(
-        std::setprecision(2) << "Blind spot poses [p1 -- p4] in " << ogm->header.frame_id << " frame : \n" << "[x: " << ps1Dst->getOrigin().getX() << ", y: " << ps1Dst->getOrigin().getY() << "]\n" << "[x: " << ps2Dst->getOrigin().getX() << ", y: " << ps2Dst->getOrigin().getY() << "]\n" << "[x: " << ps3Dst->getOrigin().getX() << ", y: " << ps3Dst->getOrigin().getY() << "]\n" << "[x: " << ps4Dst->getOrigin().getX() << ", y: " << ps4Dst->getOrigin().getY() << "]\n");
+        std::setprecision(2) << "Blind spot poses [p1 -- p4] in "
+            << ogm->header.frame_id << " frame : \n" << "[x: "
+            << ps1Dst->getOrigin().getX() << ", y: "
+            << ps1Dst->getOrigin().getY() << "]\n" << "[x: "
+            << ps2Dst->getOrigin().getX() << ", y: "
+            << ps2Dst->getOrigin().getY() << "]\n" << "[x: "
+            << ps3Dst->getOrigin().getX() << ", y: "
+            << ps3Dst->getOrigin().getY() << "]\n" << "[x: "
+            << ps4Dst->getOrigin().getX() << ", y: "
+            << ps4Dst->getOrigin().getY() << "]\n");
 
     // Draw if possible
     if (ps1Dst != NULL && ps2Dst != NULL && ps3Dst != NULL && ps4Dst != NULL) {
@@ -1076,15 +1092,22 @@ std::shared_ptr<mrpt::maps::COccupancyGridMap2D> MapserverStat::multiPooling(
 bool MapserverStat::mapStatServerSingleLayerOgm(mapserver::ism::Request &req,
                                                 mapserver::ism::Response &res) {
 
-  // !!! Treat all requests in the base_link frame of the map !!!
-  // TODO Fix this!!!
-  const std::string frameId("base_link");  // should be req.request.header.frame_id
   mapRefresh.lock();
   auto mapStack = currentMapStack;
-  std::string tileName = currentTileTfName;
+  std::string targetframe_id = currentTileTfName + tileOriginTfSufixForRoiOrigin;
   mapRefresh.unlock();
 
   // Perform sanity checks
+  try {
+    listenerTf->waitForTransform(targetframe_id, req.request.frame_id,
+                                 req.request.header.stamp, ros::Duration(3.0));
+  } catch (const std::exception &exc) {
+    throw std::runtime_error(
+        std::string(
+            "mapStatServerSingleLayerOgm: Won't perform without valid machine model"));
+  }
+
+  // Perform more sanity checks
   // Rules: There can be two "actions": multi-opinion pooling "multi" or max pooling "max" between layers
   // Action can only be performed, iff the req_info field holds multiple comma-seperated maps
   const std::vector<std::string> actionsAvailable = { "multi", "max" };
@@ -1101,7 +1124,8 @@ bool MapserverStat::mapStatServerSingleLayerOgm(mapserver::ism::Request &req,
     }
     if (it == actionsAvailable.end()) {
       ROS_ERROR_STREAM(
-          "mapStatServerSingleLayerOgm: No available action: " << req.request.action << "\n");
+          "mapStatServerSingleLayerOgm: No available action: "
+              << req.request.action << "\n");
       return false;
     }
 
@@ -1110,7 +1134,9 @@ bool MapserverStat::mapStatServerSingleLayerOgm(mapserver::ism::Request &req,
     for (auto topic = topics.begin(); topic < topics.end(); ++topic) {
       auto it = mapStack->find(*topic);
       if (it == mapStack->end()) {
-        ROS_ERROR_STREAM( "mapStatServerSingleLayerOgm: Unknown map identifier: " << *topic << "\n");
+        ROS_ERROR_STREAM(
+            "mapStatServerSingleLayerOgm: Unknown map identifier: " << *topic
+                << "\n");
         return false;
       } else {
         reqMaps->insert(std::make_pair(it->first, it->second));
@@ -1127,7 +1153,8 @@ bool MapserverStat::mapStatServerSingleLayerOgm(mapserver::ism::Request &req,
     auto it = mapStack->find(req.request.req_info);
     if (it == mapStack->end()) {
       ROS_ERROR_STREAM(
-          "mapStatServerSingleLayerOgm: Unknown map identifier: " << req.request.req_info << "\n");
+          "mapStatServerSingleLayerOgm: Unknown map identifier: "
+              << req.request.req_info << "\n");
       return false;
     } else {
       map = std::shared_ptr<mrpt::maps::COccupancyGridMap2D>(
@@ -1141,54 +1168,14 @@ bool MapserverStat::mapStatServerSingleLayerOgm(mapserver::ism::Request &req,
     // Get the map as an image
     std::shared_ptr<cv::Mat> src = mrptOggToGrayScale(*map);
 
-    // Request the current odometry
-    tf::StampedTransform transformedViewInRoi;
-    try {
-      listenerTf->waitForTransform(tileName, std::string("base_link"),
-                                   ros::Time(0), ros::Duration(3.0));
-      listenerTf->lookupTransform(tileName, std::string("base_link"),
-                                  ros::Time(0), transformedViewInRoi);
-      ROS_DEBUG("mapStatServerSingleLayerOgm: abs(x,y,z): %f",
-                transformedViewInRoi.getOrigin().length());
-    } catch (const std::exception &exc) {
-      const std::string excStr(exc.what());
-      ROS_ERROR("%s", excStr.c_str());
-      throw std::runtime_error(
-          std::string(
-              "mapStatServerSingleLayerOgm: Won't perform any tf without valid machine model"));
-    }
-
-    // Get the desired rotation
-    tf::Matrix3x3 m(transformedViewInRoi.getRotation());
-    double rollMachine, pitchMachine, yawMachine;
-    m.getRPY(rollMachine, pitchMachine, yawMachine);
-    Eigen::Matrix4d roi_machineRoi = ctf::trans<double>(
-        transformedViewInRoi.getOrigin().getX(),
-        transformedViewInRoi.getOrigin().getY(), 0.0)
-        * ctf::rotZ<double>(yawMachine);
-
-    // Request the view
     cv::Mat dst;
-    utils::cutView(*src, dst, resolution_mPerTile /*m/px*/,
-                   req.request.pose.pose.position.x,
-                   req.request.pose.pose.position.y,
-                   req.request.width * req.request.resolution,
-                   req.request.depth * req.request.resolution, yawMachine,
-                   roi_machineRoi, src->type());
+    this->cutView(*src, dst, resolution_mPerTile, targetframe_id, req.request, src->type());
 
     // Resize the resolution
-    // TODO Check if all the other do the same
-    cv::Size size(req.request.width, req.request.depth);
-    if (req.request.resolution > map->getResolution()) { // Downscaling
-      // Do averaging over pixel (INTER_AREA should be the desired method for
-      // down scaling regarding https://stackoverflow.com/questions/29572347/interpolation-for-smooth-downscale-of-image-in-opencv)
-      cv::resize(dst, dst, size, 0, 0, cv::INTER_AREA);
-    } else { // Upscaling
-      cv::resize(dst, dst, size, 0, 0, cv::INTER_NEAREST);
-    }
+    this->resizeView(dst, dst, resolution_mPerTile, req.request.resolution);
 
     // Copy the meta information
-    res.response.header.frame_id = frameId;
+    res.response.header.frame_id = req.request.frame_id;
     res.response.info.width = dst.cols;
     res.response.info.height = dst.rows;
     res.response.info.resolution = req.request.resolution;
@@ -1288,7 +1275,8 @@ void MapserverStat::getBlindSpots(ros::NodeHandle &n, BlindSpots &blindSpots) {
     try {
       if (key->compare(0, n.getNamespace().size(), n.getNamespace()) != 0) {
         ROS_DEBUG_STREAM(
-            *key << " is not a parameter in the " << n.getNamespace() << " namespace => continue");
+            *key << " is not a parameter in the " << n.getNamespace()
+                << " namespace => continue");
         continue;
       }
     } catch (...) {
@@ -1339,7 +1327,11 @@ void MapserverStat::getBlindSpots(ros::NodeHandle &n, BlindSpots &blindSpots) {
             p2, ros::Time(0.0), static_cast<std::string>(blindSpotList[4]));
         BlindSpot pt = std::make_tuple(ps1, ps2);
         ROS_INFO_STREAM(
-            "Parsing: " << "[p1x: " << ps1.getOrigin().getX() << "], " << "[p1y: " << ps1.getOrigin().getY() << "], " << "[p2x: " << ps2.getOrigin().getX() << "], " << "[p2y: " << ps2.getOrigin().getY() << "], " << "[frame_id: " << ps1.frame_id_ << "]");
+            "Parsing: " << "[p1x: " << ps1.getOrigin().getX() << "], "
+                << "[p1y: " << ps1.getOrigin().getY() << "], " << "[p2x: "
+                << ps2.getOrigin().getX() << "], " << "[p2y: "
+                << ps2.getOrigin().getY() << "], " << "[frame_id: "
+                << ps1.frame_id_ << "]");
         blindSpots.push_back(pt);
       } catch (XmlRpc::XmlRpcException a) {
         std::cerr << "XmlRpc exception: " << a.getMessage() << std::endl;

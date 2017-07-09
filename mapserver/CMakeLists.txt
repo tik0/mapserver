@@ -266,6 +266,13 @@ target_link_libraries(mapserver_raw_rpc_test
   ${Boost_LIBRARIES}
 )
 
+add_executable(mapserver_stat_rpc_test src/mapserver_stat_rpc_test.cpp)
+target_link_libraries(mapserver_stat_rpc_test
+  ${catkin_LIBRARIES}
+  ${OpenCV_LIBRARIES}
+  ${Boost_LIBRARIES}
+)
+
 add_executable(mapserver_stat_rpc_mapStack_test src/mapserver_stat_rpc_mapStack_test.cpp)
 target_link_libraries(mapserver_stat_rpc_mapStack_test
   ${catkin_LIBRARIES}
@@ -303,6 +310,7 @@ add_dependencies(mapserver_raw_rpc_test mapserver_msgs_gencpp mapserver_gencpp)
 add_dependencies(mapserver_stat mapserver_msgs_gencpp mapserver_gencpp)
 add_dependencies(mapserver_stat_node mapserver_msgs_gencpp mapserver_gencpp)
 add_dependencies(mapserver_stat_rpc_mapStack_test mapserver_msgs_gencpp mapserver_gencpp)
+add_dependencies(mapserver_stat_rpc_test mapserver_msgs_gencpp mapserver_gencpp)
 
 add_definitions("-std=c++11")
 

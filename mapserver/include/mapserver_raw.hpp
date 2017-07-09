@@ -1,10 +1,9 @@
-#include "mapserver.hpp"
 #include <boost/math/special_functions/erf.hpp>
 #include <Constants.hpp>
 #include <nav_msgs/GridCells.h>
 #include <laser_geometry/laser_geometry.h>
 #include <sensor_msgs/LaserScan.h>
-#include <utils.h>
+#include "mapserver.hpp"
 
 using namespace constants;
 using namespace constants::mappingLayers;
@@ -136,25 +135,41 @@ class MapserverRaw : public Mapserver<short, nav_msgs::OccupancyGrid, short,
                     const statistics statisticReq,
                     const uint8_t quantil = 0/*1 .. 99 %*/);
 
+//  ///
+//  /// \brief Cuts the requested view out of the map stack and processes the statistics (Return the cropped statistic view of a std::vector<cv::Mat_<int16_t>> mapStack as cv::Mat_<float>)
+//  /// \param mapStack The map layer stack
+//  /// \param xView Horizontal translation in meter
+//  /// \param yView Lateral translation in meter
+//  /// \param wView Width of the requested view in meter (expansion along xView)
+//  /// \param dView Depth of the requested view in meter (expansion along yView)
+//  /// \param zRotView Rotation around the vertical axis in rad
+//  /// \param stat The statistics to be calculated out of the map layer stack
+//  /// \param targetFrame Target frame of the request
+//  /// \param sourceFrame Source frame of the request
+//  /// \param stamp Time at which the transform from source to target frame should be done
+//  /// \return The requested and calculated view as a rectangle
+//  ///
+//  cv::Mat getStatisticView(const std::shared_ptr<std::vector<cv::Mat>> mapStack,
+//                           const double xView/*x*/, const double yView/*y*/,
+//                           const double wView/*w*/, const double dView/*h*/,
+//                           const double zRotView /*rotZ*/,
+//                           const statistics stat, const std::string targetFrame,
+//                           const std::string sourceFrame,
+//                           const ros::Time stamp = ros::Time(0.0));
+
+
   ///
   /// \brief Cuts the requested view out of the map stack and processes the statistics (Return the cropped statistic view of a std::vector<cv::Mat_<int16_t>> mapStack as cv::Mat_<float>)
   /// \param mapStack The map layer stack
-  /// \param xView Horizontal translation in meter
-  /// \param yView Lateral translation in meter
-  /// \param wView Width of the requested view in meter (expansion along xView)
-  /// \param dView Depth of the requested view in meter (expansion along yView)
-  /// \param zRotView Rotation around the vertical axis in rad
   /// \param stat The statistics to be calculated out of the map layer stack
-  /// \param targetFrame Target frame of the request
-  /// \param sourceFrame Source frame of the request
+  /// \param targetFrame_id Target frame of the request
+  /// \param view The request
   /// \return The requested and calculated view as a rectangle
   ///
-  cv::Mat getStatisticView(const std::shared_ptr<std::vector<cv::Mat>> mapStack,
-                           const double xView/*x*/, const double yView/*y*/,
-                           const double wView/*w*/, const double dView/*h*/,
-                           const double zRotView /*rotZ*/,
-                           const statistics stat, const std::string targetFrame,
-                           const std::string sourceFrame);
+  cv::Mat getStatisticView(
+        const std::shared_ptr<std::vector<cv::Mat>> mapStack,
+        const statistics stat, const std::string targetFrame_id,
+        const mapserver_msgs::mapPrimitive &view);
 
   ///
   /// \brief Wrapper function for getStatisticView() which resizes the answer to the requested resolution

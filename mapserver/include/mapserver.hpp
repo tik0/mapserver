@@ -46,6 +46,8 @@
 // OpenCV
 #include <opencv2/opencv.hpp>
 
+#include <utils.h>
+
 template<typename TMapstack, typename TData, typename TValue, typename TChild>
 class Mapserver {
 
@@ -188,6 +190,125 @@ class Mapserver {
   /// \param msg tuple of position, NavSat, and name name of the current tile tf
   ///
   virtual void tupleHandler(const mapserver_msgs::pnsTuple msg);
+
+  ///
+  /// \brief Cuts and interpolates the desired request from a map primitive
+
+  void resizeView(cv::Mat &src, cv::Mat &dst, const double resSrc, const double resTrg) {
+    // Resize the resolution
+    const double factor = resSrc / resTrg;
+    const int width = src.cols * factor;
+    const int depht = src.rows * factor;
+    cv::Size size(width, depht);
+    // resTrg=0.2 m/tile vs. resSrc=0.1 m/tile => Down scaling => cv::INTER_AREA
+    // Do averaging over pixel (INTER_AREA should be the desired method for
+    // down scaling regarding https://stackoverflow.com/questions/29572347/interpolation-for-smooth-downscale-of-image-in-opencv)
+    const cv::InterpolationFlags flag = resTrg > resSrc ? cv::INTER_AREA : cv::INTER_NEAREST;
+    cv::resize(src, dst, size, 0, 0, flag);
+  }
+
+  ///
+  /// \brief Cuts and interpolates the desired request from a map primitive
+  /// ----------------------------------
+  /// |          ____                  |
+  /// |         /   /                  |
+  /// |        /   /                   |
+  /// |       /   /                    |
+  /// |      /dst/ <-- cutted view     |
+  /// |                                |
+  /// |                                |
+  /// |                                |
+  /// |                                |
+  /// |                 O              |
+  /// |               sourceFrame      |
+  /// |                                |
+  /// |                                |
+  /// |                                |
+  /// |src                             |
+  /// O---------------------------------
+  /// targetFrame
+  ///
+  /// \param src Source content
+  /// \param dst The cutted view
+  /// \param res Resolution of the source content in m/pixel
+  /// \param targetFrame The frame where the cutted view is going to be calculated (commonly the frame where src resides)
+  /// \param sourceFrame The frame where the request was taken
+  /// \param xTrans_m X translation of the view's origin in the sourceFrame
+  /// \param yTrans_m Y translation of the view's origin in the sourceFrame
+  /// \param width_m Width in x direction of the view in the sourceFrame
+  /// \param height_m Depth in y direction of the view in the sourceFrame
+  /// \param zRot_rad Rotation of the view in the sourceFrame
+  /// \param stamp The time at which the transform should be calculated
+  /// \param targetFormat The format of dst
+  /// \return The cutted rectangle in src (s.t. targetFrame)
+  ///
+  cv::RotatedRect cutView(const cv::Mat &src, cv::Mat &dst, const double res,
+                          const std::string targetFrame,
+                          const std::string sourceFrame, const double xTrans_m,
+                          const double yTrans_m, const double width_m,
+                          const double height_m, const double zRot_rad,
+                          ros::Time stamp = ros::Time(0.0), int targetFormat =
+                              int(CV_32F)) {
+
+    tf::StampedTransform transformedView;
+    try {
+      listenerTf->waitForTransform(targetFrame, sourceFrame, stamp,
+                                   ros::Duration(3.0));
+      listenerTf->lookupTransform(targetFrame, sourceFrame, stamp,
+                                  transformedView);
+    } catch (const std::exception &exc) {
+      const std::string excStr(exc.what());
+      ROS_ERROR("%s", excStr.c_str());
+      throw std::runtime_error(
+          std::string(
+              "cutView: Won't perform any tf without valid machine model"));
+    }
+
+    tf::Matrix3x3 m(transformedView.getRotation());
+    double roll, pitch, yaw;
+    m.getRPY(roll, pitch, yaw);
+    Eigen::Matrix4d src2targetTf = constants::ctf::trans<double>(
+        transformedView.getOrigin().getX(), transformedView.getOrigin().getY(),
+        0.0) * constants::ctf::rotZ<double>(yaw);
+    // Cut the image
+    return utils::cutView(src, dst, res, xTrans_m, yTrans_m, width_m, height_m,
+                          zRot_rad, src2targetTf, targetFormat);
+  }
+
+  ///
+  /// \brief Wrapper function for cutView
+  ///
+  /// \param src Source content
+  /// \param dst The cutted view
+  /// \param res Resolution of the source content in m/pixel
+  /// \param targetFrame_id The frame where the cutted view is going to be calculated (commonly the frame where src resides)
+  /// \param view The request
+  /// \param targetFormat The format of dst
+  /// \return The cutted rectangle in src (s.t. targetFrame)
+  ///
+  cv::RotatedRect cutView(const cv::Mat &src, cv::Mat &dst, const double res,
+                          const std::string targetFrame_id, const mapserver_msgs::mapPrimitive &view,
+                          int targetFormat = int(CV_32F)) {
+
+    // Calculate the requested ROI
+    const double xView = view.pose.pose.position.x;  // Meter
+    const double yView = view.pose.pose.position.y;  // Meter
+    const double wView = view.width * view.resolution;  // Tiles * meter/tiles
+    const double dView = view.depth * view.resolution;  // Tiles * meter/tiles
+    const std::string sourceFrame_id = view.frame_id;
+    tf::Quaternion q;
+    tf::quaternionMsgToTF(view.pose.pose.orientation, q);
+    tf::Matrix3x3 m(q);
+    double roll, pitch, yaw;
+    m.getRPY(roll, pitch, yaw);
+
+    return cutView(src, dst, res, targetFrame_id, sourceFrame_id, xView,
+                              yView, wView, dView, yaw,
+                              view.header.stamp, targetFormat);
+
+
+  }
+
 
  private:
 

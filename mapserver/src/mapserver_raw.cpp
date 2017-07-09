@@ -1,28 +1,20 @@
 #include <mapserver_raw.hpp>
 
 cv::Mat MapserverRaw::getStatisticView(
-    const std::shared_ptr<std::vector<cv::Mat>> mapStack,
-    const double xView/*x*/, const double yView/*y*/, const double wView/*w*/,
-    const double dView/*h*/, const double zRotView /*rotZ*/,
-    const statistics stat, const std::string targetFrame,
-    const std::string sourceFrame) {
+      const std::shared_ptr<std::vector<cv::Mat>> mapStack,
+      const statistics stat, const std::string targetFrame_id,
+      const mapserver_msgs::mapPrimitive &view) {
   // Get the current data
   std::vector<cv::Mat> tmpMapStack(mapStack->size());
 
-  tf::StampedTransform transformedViewInRoi;
+  // Check if we have to perform the heavy processing
   try {
-    listenerTf->waitForTransform(targetFrame, sourceFrame, ros::Time(0),
+    listenerTf->waitForTransform(targetFrame_id, view.header.frame_id, view.header.stamp,
                                  ros::Duration(3.0));
-    listenerTf->lookupTransform(targetFrame, sourceFrame, ros::Time(0),
-                                transformedViewInRoi);
-    ROS_DEBUG("getStatisticView: abs(x,y,z): %f",
-              transformedViewInRoi.getOrigin().length());
   } catch (const std::exception &exc) {
-    const std::string excStr(exc.what());
-    ROS_ERROR("%s", excStr.c_str());
     throw std::runtime_error(
         std::string(
-            "doLaseTf: Won't perform any tf without valid machine model"));
+            "getStatisticView: Won't perform without valid machine model"));
   }
 
   for (std::size_t idx = 0; idx < mapStack->size(); ++idx) {
@@ -49,19 +41,9 @@ cv::Mat MapserverRaw::getStatisticView(
       break;
   }
 
-  // Get the odometry TF in the roi frame
-  tf::Matrix3x3 m(transformedViewInRoi.getRotation());
-  double roll, pitch, yaw;
-  m.getRPY(roll, pitch, yaw);
-  Eigen::Matrix4d roi_machineRoi = ctf::trans<double>(
-      transformedViewInRoi.getOrigin().getX(),
-      transformedViewInRoi.getOrigin().getY(), 0.0) * ctf::rotZ<double>(yaw);
-  // Cut the image
   cv::Mat dst;
-  rect = utils::cutView(mapStackStatistic, dst, resolution_mPerTile /*m/px*/,
-                        xView/*x*/, yView/*y*/, wView/*w*/, dView/*d*/,
-                        zRotView /*rotZ*/, roi_machineRoi /*roi odometry*/,
-                        mapStackStatistic.type());
+  rect = this->cutView(mapStackStatistic, dst, resolution_mPerTile, targetFrame_id, view, mapStackStatistic.type());
+
   if (debug) {
     mtxShowRpc.lock();
     dst.copyTo(mapStackStatisticRequestDebug);
@@ -84,34 +66,18 @@ void MapserverRaw::getStatisticOutput(
 
   mtxSwap.lock();
   const std::shared_ptr<std::vector<cv::Mat>> mapHeight_mm = input;
-  const std::string targetframe(currentTileTfName);
+  const std::string targetframe_id(currentTileTfName + tileOriginTfSufixForRoiOrigin);
   mtxSwap.unlock();
 
-  // Calculate the requested ROI
-  const double xView = view.pose.pose.position.x;  // Meter
-  const double yView = view.pose.pose.position.y;  // Meter
-  const double wView = view.width * view.resolution;  // Tiles * meter/tiles
-  const double dView = view.depth * view.resolution;  // Tiles * meter/tiles
-  const std::string sourceframe =
-      view.frame_id.empty() ? machine::frames::names::BASE_LINK : view.frame_id;
-  tf::Quaternion q;
-  tf::quaternionMsgToTF(view.pose.pose.orientation, q);
-  tf::Matrix3x3 m(q);
-  double roll, pitch, yaw;
-  m.getRPY(roll, pitch, yaw);
-
   // Get the cropped statistic with respect to view
-  output.header.stamp = ros::Time::now();
-  statisticMat = getStatisticView(input, xView/*x*/, yView/*y*/, wView/*w*/,
-                                  dView/*d*/, yaw /*rotZ*/, stat, targetframe,
-                                  sourceframe);
+  statisticMat = getStatisticView(input, stat, targetframe_id, view);
 
   // Resize the resolution
-  cv::Size size(view.width, view.depth);
-  cv::resize(statisticMat, croppedMat, size, 0, 0, cv::INTER_NEAREST);
+  resizeView(statisticMat, croppedMat, resolution_mPerTile, view.resolution);
 
   // Copy the meta information
-  output.header.frame_id = sourceframe;
+  output.header.stamp = view.header.stamp;
+  output.header.frame_id = view.header.frame_id;
   output.cols = croppedMat.cols;
   output.rows = croppedMat.rows;
   output.resolution = view.resolution;

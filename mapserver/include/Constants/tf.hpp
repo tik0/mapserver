@@ -1,3 +1,5 @@
+#ifndef CONSTANTS_TF_HPP_
+#define CONSTANTS_TF_HPP_
 
 #include <math.h>
 #include "common.hpp"
@@ -42,3 +44,5 @@ constexpr Eigen::Matrix<T, 3, 1> getTrans(Eigen::Matrix<T, 4, 4> M) {
 }
 }
 }
+
+#endif // CONSTANTS_TF_HPP_

@@ -6,11 +6,10 @@
 #define OCCUPANCY_GRIDMAP_CELL_SIZE 2
 #endif
 
-#include "mapserver.hpp"
 #include <Constants.hpp>
 #include <nav_msgs/GridCells.h>
 #include <mapserver/ism.h>
-#include <utils.h>
+#include "mapserver.hpp"
 
 using namespace constants;
 using namespace constants::mappingLayers;
