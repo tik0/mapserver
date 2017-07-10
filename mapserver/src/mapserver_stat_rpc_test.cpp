@@ -15,9 +15,10 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
 
-//Claas
+//Mapserver
 #include <mapserver_msgs/mapPrimitive.h>
 #include <mapserver/ism.h>
+
 
 using namespace constants;
 
@@ -36,6 +37,7 @@ static double transX_m = 0;
 static double transY_m = 0;
 static double transZ_m = 0;
 static std::string serviceName = "";
+static std::string reqInfo = "/ism/velodyne/svm/object";
 
 void callService() {
   // Fill the request
@@ -53,7 +55,7 @@ void callService() {
   req.request.pose.pose.position.z = transZ_m;
   req.request.resolution = resolution_meterPerTile;
   req.request.action = std::string(""); // can be multi or max
-  req.request.req_info = std::string("/ism/stock");
+  req.request.req_info = reqInfo;
 
   tf::Quaternion q;
   double roll = 0.0, pitch = 0.0, yaw = yaw_deg * constants::deg2rad;
@@ -95,6 +97,8 @@ int main(int argc, char **argv) {
   node.param<double>("req_yaw_deg", yaw_deg, 0.0);
   node.param<float>("req_resolution_meterPerTile", resolution_meterPerTile,
                     0.1);
+  node.param<std::string>("req_info", reqInfo,
+                          "/ism/velodyne/svm/object");
   node.param<std::string>("req_frame_id", frameId,
                           constants::machine::frames::names::BASE_LINK);
   node.param<float>("req_width_m", width_m, 10);

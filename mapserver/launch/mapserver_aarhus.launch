@@ -51,7 +51,7 @@
     <param name="max_distance_insertion" value="10" />
     <param name="ism_scope_prefix" type="string" value="/ism" />
     <param name="shift_map" type="int" value="1" />
-    <param name="dont_store_maps" type="int" value="0" />
+    <param name="dont_store_maps" type="int" value="1" />
     <param name="debug" type="int" value="1" />
     <param name="debug_topic" value="/ism/cam" />
     <param name="debug_ism_topic" value="/ism/velodyne/svm/vegetation" />

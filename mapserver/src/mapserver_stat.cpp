@@ -30,26 +30,23 @@ boost::shared_ptr<cv::Mat> MapserverStat::doColorMapCallback(
   return dst;
 }
 
-std::shared_ptr<cv::Mat> MapserverStat::mrptOggToGrayScale(
-    mrpt::maps::COccupancyGridMap2D &map) {
+std::shared_ptr<cv::Mat> MapserverStat::mrptOgmToGrayScale(
+    mrpt::maps::COccupancyGridMap2D &map, const bool toFloat) {
 
   std::shared_ptr<cv::Mat> dst(
-      new cv::Mat(map.getSizeY(), map.getSizeX(), CV_8UC1));
-//  dst->setTo(cv::Scalar(127,127,127)); // to set all values to 127 (aka unknown)
+      new cv::Mat(map.getSizeY(), map.getSizeX(), toFloat ? CV_32FC1 : CV_8SC1));
 
-  for (int idx = 0; idx < map.getRawMap().size(); ++idx) {
-    dst->at<uchar>(idx) = mrpt::maps::COccupancyGridMap2D::l2p_255(
-        map.getRawMap().at(idx));
+  if (toFloat) {
+    for (int idx = 0; idx < map.getRawMap().size(); ++idx) {
+      dst->at<float>(idx) = mrpt::maps::COccupancyGridMap2D::l2p(
+          map.getRawMap().at(idx));
+    }
+  } else {
+    for (int idx = 0; idx < map.getRawMap().size(); ++idx) {
+      dst->at<char>(idx) = char(100.0f * mrpt::maps::COccupancyGridMap2D::l2p(
+          map.getRawMap().at(idx)));
+    }
   }
-//  for (int idy = 0; idy < map.getSizeY(); ++idy) {
-//    for (int idx = 0; idx < map.getSizeX(); ++idx) {
-//      const uchar intensity = uchar(map.getCell(idx, idy) * 255);
-//      dst->at<uchar>(idx,idy) = intensity;
-//    }
-//  }
-
-//  DEBUG_MSG("Server returns map")
-//   cv::flip(*dst, *dst, 0);  // horizontal flip
   return dst;
 }
 
@@ -412,11 +409,11 @@ void MapserverStat::calcIsm4Mapserver(const double xIsmCenter_m,
 }
 
 // Todo Do we some mutex around here ?
-nav_msgs::OccupancyGrid::Ptr MapserverStat::oggTf(
+nav_msgs::OccupancyGrid::Ptr MapserverStat::ogmTf(
     const std::string &targetFrame,
     const nav_msgs::OccupancyGrid::ConstPtr ismRos, const double targetRes) {
 
-  nav_msgs::OccupancyGrid::Ptr oggTrans;
+  nav_msgs::OccupancyGrid::Ptr ogmTrans;
 
   // Get the transform between the frames
   tf::StampedTransform tfOcc;
@@ -428,7 +425,7 @@ nav_msgs::OccupancyGrid::Ptr MapserverStat::oggTf(
   } catch (const std::exception &exc) {
     const std::string excStr(exc.what());
     ROS_ERROR("tfTileNameHandler: %s", excStr.c_str());
-    return oggTrans;
+    return ogmTrans;
   }
 
   // Get the arguments to pack the current ISM into the ROI frame
@@ -444,17 +441,17 @@ nav_msgs::OccupancyGrid::Ptr MapserverStat::oggTf(
       tfOcc.getRotation().getY(), tfOcc.getRotation().getZ());
 
   // Allocate the new Occ TODO: This is to sloppy, need propper definition
-  oggTrans = boost::shared_ptr<nav_msgs::OccupancyGrid>(
+  ogmTrans = boost::shared_ptr<nav_msgs::OccupancyGrid>(
       new nav_msgs::OccupancyGrid);
-  oggTrans->header = ismRos->header;
-  oggTrans->header.frame_id = targetFrame;
-  oggTrans->info.resolution =
+  ogmTrans->header = ismRos->header;
+  ogmTrans->header.frame_id = targetFrame;
+  ogmTrans->info.resolution =
       targetRes < 0.0 ? ismRos->info.resolution : targetRes;
-//  oggTrans->info.origin = ???
-  const int width = (maxX_m - minX_m) / oggTrans->info.resolution;
-  const int height = (maxY_m - minY_m) / oggTrans->info.resolution;
-  oggTrans->info.width = width;
-  oggTrans->info.height = height;
+//  ogmTrans->info.origin = ???
+  const int width = (maxX_m - minX_m) / ogmTrans->info.resolution;
+  const int height = (maxY_m - minY_m) / ogmTrans->info.resolution;
+  ogmTrans->info.width = width;
+  ogmTrans->info.height = height;
 
   // Allocate opencv images to do the work
   cv::Mat ismInRoi(height, width, CV_8SC1);
@@ -504,10 +501,10 @@ nav_msgs::OccupancyGrid::Ptr MapserverStat::oggTf(
                     ismRos->info.resolution, ismInRoi, ism);
 
   const size_t size = width * height;
-  oggTrans->data.resize(size);
-  memcpy((void*) oggTrans->data.data(), (void*) ismInRoi.data, size);
+  ogmTrans->data.resize(size);
+  memcpy((void*) ogmTrans->data.data(), (void*) ismInRoi.data, size);
 
-  return oggTrans;
+  return ogmTrans;
 
 }
 
@@ -1094,12 +1091,12 @@ bool MapserverStat::mapStatServerSingleLayerOgm(mapserver::ism::Request &req,
 
   mapRefresh.lock();
   auto mapStack = currentMapStack;
-  std::string targetframe_id = currentTileTfName + tileOriginTfSufixForRoiOrigin;
+  std::string targetFrame_id = currentTileTfName + tileOriginTfSufixForRoiOrigin;
   mapRefresh.unlock();
 
   // Perform sanity checks
   try {
-    listenerTf->waitForTransform(targetframe_id, req.request.frame_id,
+    listenerTf->waitForTransform(targetFrame_id, req.request.frame_id,
                                  req.request.header.stamp, ros::Duration(3.0));
   } catch (const std::exception &exc) {
     throw std::runtime_error(
@@ -1164,34 +1161,42 @@ bool MapserverStat::mapStatServerSingleLayerOgm(mapserver::ism::Request &req,
   }
 
   // Get the requested view
+  cv::Mat dst;
   try {
     // Get the map as an image
-    std::shared_ptr<cv::Mat> src = mrptOggToGrayScale(*map);
+    std::shared_ptr<cv::Mat> src = mrptOgmToGrayScale(*map);
 
-    cv::Mat dst;
-    this->cutView(*src, dst, resolution_mPerTile, targetframe_id, req.request, src->type());
+    const cv::Scalar extrapolationScalar(50.0);
+    this->cutView(*src, dst, resolution_mPerTile, targetFrame_id, req.request, src->type(), &extrapolationScalar);
 
     // Resize the resolution
     this->resizeView(dst, dst, resolution_mPerTile, req.request.resolution);
 
-    // Copy the meta information
-    res.response.header.frame_id = req.request.frame_id;
-    res.response.info.width = dst.cols;
-    res.response.info.height = dst.rows;
-    res.response.info.resolution = req.request.resolution;
-    const int arraySize = dst.cols * dst.rows;
-    res.response.data.resize(arraySize);
-
-    // Copy the payload
-    // TODO replace by memcpy if memory is not fragmented
-    for (int idx = 0; idx < arraySize; ++idx) {
-      res.response.data.at(idx) = dst
-          .at<mrpt::maps::COccupancyGridMap2D::cellType>(idx);
-    }
+  } catch (const std::exception &exc) {
+//      const std::string excStr(exc.what());
+      ROS_ERROR_STREAM("mapStatServerSingleLayerOgm: " << exc.what());
+    return false;
   } catch (...) {
-    ROS_ERROR_STREAM("mapStatServerSingleLayerOgm: Something happened");
+    ROS_ERROR_STREAM("mapStatServerSingleLayerOgm: Something strange happened");
     return false;
   }
+
+
+  // Copy the meta information
+  res.response.header.frame_id = req.request.frame_id;
+  res.response.info.width = dst.cols;
+  res.response.info.height = dst.rows;
+  res.response.info.resolution = req.request.resolution;
+  const int arraySize = dst.cols * dst.rows;
+  res.response.data.resize(arraySize);
+
+  // Copy the payload
+  // TODO replace by memcpy if memory is not fragmented
+  for (int idx = 0; idx < arraySize; ++idx) {
+    res.response.data.at(idx) = dst
+        .at<mrpt::maps::COccupancyGridMap2D::cellType>(idx);
+  }
+
   return true;
 }
 
@@ -1350,7 +1355,7 @@ void MapserverStat::spinOnce() {
   //      cv::waitKey(1); // Update the window
   if (debug) {
     try {
-      //            std::shared_ptr<cv::Mat> image(mrptOggToGrayScale(*currentMapStack->at(debugTopic)));
+      //            std::shared_ptr<cv::Mat> image(mrptOgmToGrayScale(*currentMapStack->at(debugTopic)));
       //            std::shared_ptr<cv::Mat> image(Mapserver::rosOccToGrayScale(this->msgDebug));
       //              if (image) {
       //                  cv::flip(*image, *image, 0);

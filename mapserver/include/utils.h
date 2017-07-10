@@ -516,7 +516,7 @@ rect.height=img.rows-rect.y;
  */
 cv::RotatedRect cutView(const cv::Mat &src, cv::Mat &dst, const double srcResolution,
 const double xTranslation_m, const double yTranslation_m, const double width_m, const double height_m, const double zRotation_rad,
-const Eigen::Matrix4d &roi_machineRoi, int targetFormat = int(CV_32F)) {
+const Eigen::Matrix4d &roi_machineRoi, int targetFormat = int(CV_32F), const cv::Scalar *extrapolationScalarPtr = NULL) {
 cv::RotatedRect rectView;
 const double xView = xTranslation_m;  // Meter
 const double yView = yTranslation_m;// Meter
@@ -567,13 +567,17 @@ cv::Mat croppedROI=srcConverted(boundingRect);
 
 // perform the affine transformation
 cv::Scalar boarderExtrapolationScalar;
+if (extrapolationScalarPtr == NULL) {
 switch (src.type()) {
 case CV_32SC1: boarderExtrapolationScalar = cv::Scalar_<int32_t>(numerics::invalidValue_int32); break;
 case CV_16SC1: boarderExtrapolationScalar = cv::Scalar_<int16_t>(numerics::invalidValue_int16); break;
 case CV_8SC1: boarderExtrapolationScalar = cv::Scalar_<int8_t>(numerics::invalidValue_int8); break;
 case CV_64FC1: boarderExtrapolationScalar = cv::Scalar_<double>(numerics::invalidValue_double); break;
 case CV_32FC1: boarderExtrapolationScalar = cv::Scalar_<float>(numerics::invalidValue_float); break;
-default: throw std::runtime_error(std::string("cutView: Unsupported source type")); break;
+default: throw std::runtime_error(std::string("cutView: Unsupported source type '") + conversion::format2str(src.type()) + std::string("'")); break;
+}
+} else {
+boarderExtrapolationScalar = *extrapolationScalarPtr;
 }
   // get angle and size from the bounding box
 float angle = rectView.angle;

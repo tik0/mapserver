@@ -83,12 +83,11 @@ class MapserverStat : public Mapserver<mrpt::maps::COccupancyGridMap2D,
   ///
   /// \brief converts MRPT occ map to grayscale image
   /// \param map The map to convert
+  /// \param toFloat Converts content to float if true
   /// \return Shared pointer to the image. Is Null pointer if image conversion was unsuccessful
-  std::shared_ptr<cv::Mat> mrptOggToGrayScale(
-      mrpt::maps::COccupancyGridMap2D &map);
-
-//  std::shared_ptr<cv::Mat> rosOggToGrayScale(
-//      nav_msgs::OccupancyGrid::ConstPtr map);
+  ///
+  std::shared_ptr<cv::Mat> mrptOgmToGrayScale(
+      mrpt::maps::COccupancyGridMap2D &map, const bool toFloat = false);
 
   ///
   /// \brief Returns the pose in the desired frame
@@ -198,7 +197,7 @@ class MapserverStat : public Mapserver<mrpt::maps::COccupancyGridMap2D,
   void calcIsm4Mapserver(const double xIsmCenter_m, const double yIsmCenter_m,
                          const double phiIsm_rad, const double ismResolution,
                          cv::Mat &ismInRoi, cv::Mat &ism);
-  nav_msgs::OccupancyGrid::Ptr oggTf(
+  nav_msgs::OccupancyGrid::Ptr ogmTf(
       const std::string &targetFrame,
       const nav_msgs::OccupancyGrid::ConstPtr ismRos, const double targetRes =
           -1/*meter/tile*/);
@@ -285,7 +284,7 @@ class MapserverStat : public Mapserver<mrpt::maps::COccupancyGridMap2D,
   ///
   /// \brief Set all map tiles of all maps to the given value
   /// \param mapStack The mapstack to reset
-  /// \param fillValue Probability fill-up value in loggodds
+  /// \param fillValue Probability fill-up value in logodds
   ///
   virtual void fillMapStack(
       std::vector<mrpt::maps::COccupancyGridMap2D> &mapStack,
@@ -305,7 +304,7 @@ class MapserverStat : public Mapserver<mrpt::maps::COccupancyGridMap2D,
   ///
   /// \brief Set all map tiles of a map to the given value
   /// \param mapStack The mapstack to reset
-  /// \param fillValue Probability fill-up value in loggodds
+  /// \param fillValue Probability fill-up value in logodds
   ///
   virtual void fillMap(
       mrpt::maps::COccupancyGridMap2D &map,

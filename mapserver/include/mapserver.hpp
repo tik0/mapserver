@@ -193,18 +193,39 @@ class Mapserver {
 
   ///
   /// \brief Cuts and interpolates the desired request from a map primitive
-
-  void resizeView(cv::Mat &src, cv::Mat &dst, const double resSrc, const double resTrg) {
-    // Resize the resolution
-    const double factor = resSrc / resTrg;
-    const int width = src.cols * factor;
-    const int depht = src.rows * factor;
-    cv::Size size(width, depht);
+  ///
+  /// \param src The source image
+  /// \param dst The result
+  /// \param resSrc The source resolution in meter/pixel of src
+  /// \param resTrg The target resolution in meter/pixel of dst
+  ///
+  inline void resizeView(cv::Mat &src, cv::Mat &dst, const cv::Size &targetSize) {
+    ROS_DEBUG_STREAM("resizeView: src.cols = " << src.cols << ", src.rows = " << src.rows << ", size.width = " << targetSize.width << ", size.height = " << targetSize.height);
+    ROS_ASSERT(src.cols <= 0 || src.rows <= 0 || targetSize.width <= 0 || targetSize.height <= 0);
     // resTrg=0.2 m/tile vs. resSrc=0.1 m/tile => Down scaling => cv::INTER_AREA
     // Do averaging over pixel (INTER_AREA should be the desired method for
     // down scaling regarding https://stackoverflow.com/questions/29572347/interpolation-for-smooth-downscale-of-image-in-opencv)
-    const cv::InterpolationFlags flag = resTrg > resSrc ? cv::INTER_AREA : cv::INTER_NEAREST;
-    cv::resize(src, dst, size, 0, 0, flag);
+    // TODO Implement cv::INTER_AREA for CV_8SC1 and check for CV_32C1 because there are lot of artifacts
+//    const cv::InterpolationFlags flag = resTrg > resSrc ? cv::INTER_AREA : cv::INTER_NEAREST;
+    const cv::InterpolationFlags flag = cv::INTER_NEAREST;
+    cv::resize(src, dst, targetSize, 0, 0, flag);
+  }
+
+  ///
+  /// \brief Cuts and interpolates the desired request from a map primitive
+  ///
+  /// \param src The source image
+  /// \param dst The result
+  /// \param resSrc The source resolution in meter/pixel of src
+  /// \param resTrg The target resolution in meter/pixel of dst
+  ///
+  void resizeView(cv::Mat &src, cv::Mat &dst, const double resSrc, const double resTrg) {
+    // Resize the resolution
+    const double factor = resSrc / resTrg;
+    const int width = round(src.cols * factor);
+    const int depht = round(src.rows * factor);
+    const cv::Size size(width, depht);
+    resizeView(src, dst, size);
   }
 
   ///
@@ -240,6 +261,7 @@ class Mapserver {
   /// \param zRot_rad Rotation of the view in the sourceFrame
   /// \param stamp The time at which the transform should be calculated
   /// \param targetFormat The format of dst
+  /// \param extrapolationScalarPtr Pointer to the scalar for extrapolation
   /// \return The cutted rectangle in src (s.t. targetFrame)
   ///
   cv::RotatedRect cutView(const cv::Mat &src, cv::Mat &dst, const double res,
@@ -248,7 +270,7 @@ class Mapserver {
                           const double yTrans_m, const double width_m,
                           const double height_m, const double zRot_rad,
                           ros::Time stamp = ros::Time(0.0), int targetFormat =
-                              int(CV_32F)) {
+                              int(CV_32F), const cv::Scalar *extrapolationScalarPtr = NULL) {
 
     tf::StampedTransform transformedView;
     try {
@@ -272,7 +294,7 @@ class Mapserver {
         0.0) * constants::ctf::rotZ<double>(yaw);
     // Cut the image
     return utils::cutView(src, dst, res, xTrans_m, yTrans_m, width_m, height_m,
-                          zRot_rad, src2targetTf, targetFormat);
+                          zRot_rad, src2targetTf, targetFormat, extrapolationScalarPtr);
   }
 
   ///
@@ -284,11 +306,12 @@ class Mapserver {
   /// \param targetFrame_id The frame where the cutted view is going to be calculated (commonly the frame where src resides)
   /// \param view The request
   /// \param targetFormat The format of dst
+  /// \param extrapolationScalarPtr Pointer to the scalar for extrapolation
   /// \return The cutted rectangle in src (s.t. targetFrame)
   ///
   cv::RotatedRect cutView(const cv::Mat &src, cv::Mat &dst, const double res,
                           const std::string targetFrame_id, const mapserver_msgs::mapPrimitive &view,
-                          int targetFormat = int(CV_32F)) {
+                          int targetFormat = int(CV_32F), const cv::Scalar *extrapolationScalarPtr = NULL) {
 
     // Calculate the requested ROI
     const double xView = view.pose.pose.position.x;  // Meter
@@ -304,7 +327,7 @@ class Mapserver {
 
     return cutView(src, dst, res, targetFrame_id, sourceFrame_id, xView,
                               yView, wView, dView, yaw,
-                              view.header.stamp, targetFormat);
+                              view.header.stamp, targetFormat, extrapolationScalarPtr);
 
 
   }

@@ -15,7 +15,7 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
 
-//Claas
+//Mapserver
 #include <mapserver_msgs/mapPrimitive.h>
 #include <mapserver/rsm.h>
 
