@@ -1452,6 +1452,17 @@ void MapserverStat::mapStorage(
   const tf::StampedTransform dummyTf;
   const mrpt::maps::COccupancyGridMap2D::cellType dummy = 0;
 
+  // Create a lon_lat_alt string if available
+  std::string additionalInformationString("");
+  if (lastPnsTuple != NULL) {
+    std::stringstream navSatSs;
+    navSatSs << std::setprecision(12) << "lat_"
+             << lastPnsTuple->navsat.latitude << "_" << "lon_"
+             << lastPnsTuple->navsat.longitude << "_" << "alt_"
+             << lastPnsTuple->navsat.altitude;
+    additionalInformationString = navSatSs.str();
+  }
+
   mapRefreshAndStorage(mapStack,                     // Map to shift/store/reset
       dummyMap,                                 // Nothing at all
       dummyTf,                                  // Transform
@@ -1464,5 +1475,5 @@ void MapserverStat::mapStorage(
       false,                                    // Map should be reseted reset
       dummy,                                    // Some float value
       false,                                 // Don't store the current position
-      std::string(""), timestamp);
+      additionalInformationString, timestamp);
 }

@@ -156,6 +156,8 @@ class Mapserver {
   std::shared_ptr<std::map<std::string, TMapstack*>> currentMapStack;
   //! The last mapstack (Passive mapstack in the double buffer)
   std::shared_ptr<std::map<std::string, TMapstack*>> lastMapStack;
+  //! The last pns tuple which was received (NULL if non have been received yet)
+  std::shared_ptr<mapserver_msgs::pnsTuple> lastPnsTuple;
 
 // ROS listener and subscribers
  public:
@@ -698,13 +700,14 @@ template<typename TMapstack, typename TData, typename TValue, typename TChild>
 void Mapserver<TMapstack, TData, TValue, TChild>::tupleHandler(
     const mapserver_msgs::pnsTuple msg) {
   bool currentTileTfNameChange = false;
-  static mapserver_msgs::pnsTuple lastPnsTuple;
+
   mapRefresh.lock();
   if ((msg.string.data.back() != currentTileTfName.back())) {
     if (currentTileTfName.empty()) {
       // First round, we bootstrap
       currentTileTfName = msg.string.data;
-      lastPnsTuple = msg;
+      lastPnsTuple = std::shared_ptr<mapserver_msgs::pnsTuple>(new mapserver_msgs::pnsTuple);
+      *lastPnsTuple = msg;
     } else {
       this->swapStack();
       lastTileTfName = currentTileTfName;
@@ -724,9 +727,9 @@ void Mapserver<TMapstack, TData, TValue, TChild>::tupleHandler(
     if (this->referencesGoneWaiter()) {
       std::stringstream navSatSs;
       navSatSs << std::setprecision(12) << "lat_"
-               << lastPnsTuple.navsat.latitude << "_" << "lon_"
-               << lastPnsTuple.navsat.longitude << "_" << "alt_"
-               << lastPnsTuple.navsat.altitude;
+               << lastPnsTuple->navsat.latitude << "_" << "lon_"
+               << lastPnsTuple->navsat.longitude << "_" << "alt_"
+               << lastPnsTuple->navsat.altitude;
 
       mapRefreshAndStorage(lastMapStack,         // Map to shift/store/reset
           currentMapStack,                      // The result of the shifted map
@@ -741,7 +744,7 @@ void Mapserver<TMapstack, TData, TValue, TChild>::tupleHandler(
           mapInitValue,                          // Fill-up value
           true, navSatSs.str(), msg.header.stamp);
       // Store the current tile information as next last one
-      lastPnsTuple = msg;
+      *lastPnsTuple = msg;
     }
   }
 
