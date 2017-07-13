@@ -192,6 +192,23 @@ class Mapserver {
   /// \param msg tuple of position, NavSat, and name name of the current tile tf
   ///
   virtual void tupleHandler(const mapserver_msgs::pnsTuple msg);
+  ///
+  /// \brief Store the current tf tile name and swap the storage
+  /// \param nameMsg Name of the current tile tf
+  ///
+  void tfTileNameHandlerCb(const std_msgs::String &nameMsg) {
+    std::cerr << "Called tfTileNameHandlerCb\n";
+    tfTileNameHandler(nameMsg);
+  };
+
+  ///
+  /// \brief Store the current tf tile name and swap the storage
+  /// \param msg tuple of position, NavSat, and name name of the current tile tf
+  ///
+  void tupleHandlerCb(const mapserver_msgs::pnsTuple &msg) {
+    std::cerr << "Called tupleHandlerCb\n";
+    tupleHandler(msg);
+  };
 
   ///
   /// \brief Cuts and interpolates the desired request from a map primitive
@@ -907,18 +924,15 @@ Mapserver<TMapstack, TData, TValue, TChild>::Mapserver(ros::NodeHandle *nh)
 
   // Check whether we should get our tile information via a tuple or just via a name
   if (currentTupleTopic.empty()) {
-//      subscriberTfTileName = Mapserver::n.subscribe<std_msgs::String>(currentTfNameTopic, 2, &Mapserver::tfTileNameHandler, this);
     this->subscriberTfTileName = n->subscribe(currentTfNameTopic, 2,
-                                              &Mapserver::tfTileNameHandler,
+                                              &Mapserver::tfTileNameHandlerCb,
                                               this);
   } else {
-//      subscriberTuple = Mapserver::n.subscribe<mapserver_msgs::pnsTuple>(currentTupleTopic, 2, &Mapserver::tupleHandler, this);
     this->subscriberTuple = n->subscribe(currentTupleTopic, 2,
-                                         &Mapserver::tupleHandler, this);
+                                         &Mapserver::tupleHandlerCb, this);
   }
 
   // Command scope to store the maps on demand
-//  subscriberStoreMaps = Mapserver::n.subscribe<std_msgs::String>(storeMapsTopic, 1, &Mapserver::storeMaps, this);
   this->subscriberStoreMaps = n->subscribe(this->storeMapsTopic, 1,
                                            &Mapserver::storeMaps, this);
 
@@ -1296,7 +1310,7 @@ void Mapserver<TMapstack, TData, TValue, TChild>::spin() {
   spinner.start();
   // Do stuff periodically
   ros::Rate _rate(this->rate);
-  ROS_INFO("Mapserver starts spinning");
+  ROS_INFO_STREAM("Mapserver '" << n->getNamespace() << "' starts spinning");
   while (ros::ok()) {
     this->spinOnce();
     _rate.sleep();

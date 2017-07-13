@@ -5,6 +5,7 @@
   <arg name="roi_width" value="50.0" /> <!-- (m) x -->
   <arg name="roi_height" value="50.0" /> <!-- (m) y -->
   <arg name="roi_altitude" value="0.0" /> <!-- (m) z NOT USED-->
+  <arg name="resolution" value="0.1" /> <!-- (m/tile)-->
   
   
   <!-- Map server -->
@@ -36,15 +37,17 @@
     <param name="tf_name_publish_delay" value="2.0" />
     <param name="tf_tile_history" value="-1" />
   </node>
-
-  <node pkg="mapserver" name="mapserver_raw" type="mapserver_raw">
-    world_link
-    <param name="world_link" type="string" value="world" />
+  
+  <!--Raw server for Structure-from-Motion Algorithm-->
+  <node pkg="mapserver" name="mapserver_raw_SFM_node" type="mapserver_raw_node">
+    <param name="world_link" type="string" value="odom" />
     <param name="tile_origin_tf_prefix" type="string" value="map_base_link_" />
     <param name="tile_origin_tf_sufix_for_roi_origin" type="string" value="_ROI_ORIGIN" />
+    <param name="current_tf_name_topic" type="string" value="/currentTfTile" />
+    <param name="current_tuple_topic" type="string" value="/currentTuple" />
     <param name="shift_map" type="int" value="1" />
-    <param name="topic_data" type="string" value="amiro5/laser/scan" />
-    <param name="topic_data_is_point_cloud" type="int" value="0" />
+    <param name="topic_data" type="string" value="/sfm_point_cloud" /> <!--TODO-->
+    <param name="topic_data_is_point_cloud" type="int" value="1" />
     <param name="dont_store_maps" type="int" value="1" />
     <param name="send_top_layer_of_distancestack_as_ogm" type="int" value="1" />
     <param name="debug" type="int" value="0" />
@@ -53,23 +56,47 @@
     <param name="max_y_m" value="$(eval arg('roi_height') / 2)" />
     <param name="min_x_m" value="$(eval -arg('roi_width') / 2)" />
     <param name="min_y_m" value="$(eval -arg('roi_height') / 2)" />
+    <param name="resolution" value="$(arg resolution)" />
+    <param name="map_storage_location" value="/tmp/" />
+  </node>
+  
+  <node pkg="mapserver" name="mapserver_raw_LASE2000_1_node" type="mapserver_raw_node" output="screen">
+    <param name="world_link" type="string" value="odom" />
+    <param name="tile_origin_tf_prefix" type="string" value="map_base_link_" />
+    <param name="tile_origin_tf_sufix_for_roi_origin" type="string" value="_ROI_ORIGIN" />
+    <param name="current_tf_name_topic" type="string" value="/currentTfTile" />
+    <param name="current_tuple_topic" type="string" value="/currentTuple" />
+    <param name="shift_map" type="int" value="1" />
+    <param name="topic_data" type="string" value="/sense/LASE2000D/1" />
+    <param name="topic_data_is_point_cloud" type="int" value="0" />
+    <param name="dont_store_maps" type="int" value="1" />
+    <param name="send_top_layer_of_distancestack_as_ogm" type="int" value="0" />
+    <param name="debug" type="int" value="0" />
+    <param name="debug_draw_rpc_in_view" type="int" value="0" />
+    <param name="max_x_m" value="$(eval arg('roi_width') / 2)" />
+    <param name="max_y_m" value="$(eval arg('roi_height') / 2)" />
+    <param name="min_x_m" value="$(eval -arg('roi_width') / 2)" />
+    <param name="min_y_m" value="$(eval -arg('roi_height') / 2)" />
+    <param name="resolution" value="$(arg resolution)" />
+    <param name="map_storage_location" value="/tmp/" />
   </node>
   
 <?undefined
   <!--launch-prefix="gdb -ex run --args"-->
 ?>
+
   <node pkg="mapserver" name="mapserver_stat" type="mapserver_stat_node" respawn="true" output="screen">
     <param name="tile_origin_tf_prefix" type="string" value="map_base_link_" />
     <param name="tile_origin_tf_sufix_for_roi_origin" type="string" value="_ROI_ORIGIN" />
     <param name="current_tf_name_topic" type="string" value="/currentTfTile" />
     <param name="current_tuple_topic" type="string" value="/currentTuple" />
     <param name="world_link" type="string" value="odom" />
-    <param name="resolution" value="0.02" />
+    <param name="resolution" value="$(arg resolution)" />
     <param name="max_occupancy_update_certainty" value="255" />
     <param name="max_distance_insertion" value="10" />
     <param name="ism_scope_prefix" type="string" value="/ism" />
     <param name="shift_map" type="int" value="1" />
-    <param name="dont_store_maps" type="int" value="0" />
+    <param name="dont_store_maps" type="int" value="1" />
     <param name="debug" type="int" value="1" />
     <param name="debug_topic" value="/ism/cam" />
     <param name="debug_ism_topic" value="/ism/velodyne/svm/vegetation" />

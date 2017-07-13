@@ -187,7 +187,13 @@ void MapserverRaw::getStatistic(const std::vector<cv::Mat> &src, cv::Mat &dst,
   }
 }
 
-void MapserverRaw::laserDataHandler(const sensor_msgs::LaserScan::ConstPtr scanMsg) {
+void MapserverRaw::dataHandler(const sensor_msgs::PointCloud2::Ptr cloud2) {
+  sensor_msgs::PointCloud cloud;
+  sensor_msgs::convertPointCloud2ToPointCloud(*cloud2, cloud);
+  this->dataHandler(boost::make_shared<sensor_msgs::PointCloud>(cloud));
+}
+
+void MapserverRaw::dataHandler(const sensor_msgs::LaserScan::ConstPtr scanMsg) {
   sensor_msgs::PointCloud cloud;
   projector.projectLaser(*scanMsg, cloud, -1.0,
                          laser_geometry::channel_option::Intensity);

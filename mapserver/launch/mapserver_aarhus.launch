@@ -40,6 +40,7 @@
 <?undefined
   <!--launch-prefix="gdb -ex run --args"-->
 ?>
+
   <node pkg="mapserver" name="mapserver_stat" type="mapserver_stat_node" respawn="true" output="screen">
     <param name="tile_origin_tf_prefix" type="string" value="map_base_link_" />
     <param name="tile_origin_tf_sufix_for_roi_origin" type="string" value="_ROI_ORIGIN" />
@@ -69,6 +70,27 @@
     <param name="store_maps_topic" type="string" value="/storemaps" />
     <rosparam command="load" file="$(find mapserver)/yaml/blindspots.yaml" />
   </node>
+
+<!--  <node pkg="mapserver" name="mapserver_raw_node" type="mapserver_raw_node">
+    <param name="world_link" type="string" value="odom" />
+    <param name="tile_origin_tf_prefix" type="string" value="map_base_link_" />
+    <param name="tile_origin_tf_sufix_for_roi_origin" type="string" value="_ROI_ORIGIN" />
+    <param name="current_tf_name_topic" type="string" value="/currentTfTile" />
+    <param name="current_tuple_topic" type="string" value="/currentTuple" />
+    <param name="shift_map" type="int" value="1" />
+    <param name="topic_data" type="string" value="/velodyne_points" />
+    <param name="topic_data_is_point_cloud" type="int" value="2" />
+    <param name="dont_store_maps" type="int" value="1" />
+    <param name="send_top_layer_of_distancestack_as_ogm" type="int" value="1" />
+    <param name="debug" type="int" value="0" />
+    <param name="debug_draw_rpc_in_view" type="int" value="0" />
+    <param name="max_x_m" value="$(eval arg('roi_width') / 2)" />
+    <param name="max_y_m" value="$(eval arg('roi_height') / 2)" />
+    <param name="min_x_m" value="$(eval -arg('roi_width') / 2)" />
+    <param name="min_y_m" value="$(eval -arg('roi_height') / 2)" />
+    <param name="resolution" value="0.02" />
+    <param name="map_storage_location" value="/tmp/" />
+  </node>-->
 
  </launch>
 

@@ -3,6 +3,9 @@
 #include <nav_msgs/GridCells.h>
 #include <laser_geometry/laser_geometry.h>
 #include <sensor_msgs/LaserScan.h>
+#include <sensor_msgs/PointCloud.h>
+#include <sensor_msgs/PointCloud2.h>
+#include <sensor_msgs/point_cloud_conversion.h>
 #include "mapserver.hpp"
 
 using namespace constants;
@@ -36,7 +39,7 @@ class MapserverRaw : public Mapserver<short, nav_msgs::OccupancyGrid, short,
   ;
 
   ros::Publisher publisherMap;
-  ros::Subscriber subscriberData, subscriberTfTileName;
+  ros::Subscriber subscriberData;
   laser_geometry::LaserProjection projector;
 
   // Variables
@@ -87,7 +90,6 @@ class MapserverRaw : public Mapserver<short, nav_msgs::OccupancyGrid, short,
   /// \param clearMapStack Set the whole map stack to the default value
   /// \param fillValue Value to fill up a cleared or shifted map
   ///
-
   template<typename T>
   void mapRefreshAndStorage(
       std::shared_ptr<std::vector<cv::Mat>> mapStack,
@@ -105,13 +107,19 @@ class MapserverRaw : public Mapserver<short, nav_msgs::OccupancyGrid, short,
   /// \brief Transforms the received laser messages into the map frame and stores them in the next free map layer
   /// \param scanMsg Laser message to process
   ///
+  void dataHandler(const sensor_msgs::PointCloud2::Ptr scanMsg);
+
+  ///
+  /// \brief Transforms the received laser messages into the map frame and stores them in the next free map layer
+  /// \param scanMsg Laser message to process
+  ///
   void dataHandler(const sensor_msgs::PointCloud::Ptr scanMsg);
 
   ///
   /// \brief Transforms the received point cloud messages into the map frame and stores them in the next free map layer
   /// \param scanMsg Point cloud message to process
   ///
-  void laserDataHandler(const sensor_msgs::LaserScan::ConstPtr scanMsg);
+  void dataHandler(const sensor_msgs::LaserScan::ConstPtr scanMsg);
 
   ///////////////////////////////////////////SERVER///////////////////////////////////////////////////////////////
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -368,18 +376,21 @@ MapserverRaw::MapserverRaw(ros::NodeHandle &nh)
 
   publisherMap = n.advertise<nav_msgs::OccupancyGrid>(topicMap, 1);
 
-  if (this->topicDataIsPointCloud) {
+  if (this->topicDataIsPointCloud == 2) {
+    ROS_INFO("Subscribe to sensor_msgs::PointCloud2 messages");
+    subscriberData = n.subscribe<sensor_msgs::PointCloud2::Ptr>(
+        topicData, 1, &MapserverRaw::dataHandler, this);
+   } else if (this->topicDataIsPointCloud == 1) {
     ROS_INFO("Subscribe to sensor_msgs::PointCloud messages");
     subscriberData = n.subscribe<sensor_msgs::PointCloud::Ptr>(
-        topicData, 100, &MapserverRaw::dataHandler, this);
-  } else {
+        topicData, 1, &MapserverRaw::dataHandler, this);
+  } else if (this->topicDataIsPointCloud == 0) {
     ROS_INFO("Subscribe to sensor_msgs::LaserScan messages");
     subscriberData = n.subscribe<sensor_msgs::LaserScan::ConstPtr>(
-        topicData, 100, &MapserverRaw::laserDataHandler, this);
+        topicData, 1, &MapserverRaw::dataHandler, this);
+  } else {
+    ROS_ASSERT(this->topicDataIsPointCloud < 0 || this->topicDataIsPointCloud > 2);
   }
-
-  subscriberTfTileName = n.subscribe<std_msgs::String>(
-      currentTfNameTopic, 2, &MapserverRaw::tfTileNameHandler, this);
 
   // Allocate space for the maps and init the double-buffer
   storageMapBuffer = cv::Mat(mapSizeX, mapSizeY, CV_8UC1);
