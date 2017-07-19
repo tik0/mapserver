@@ -1,9 +1,11 @@
 <?xml version="1.0"?>
  <launch>
   <!-- ISM Mapserver -->
-    <!--We assume that the robot is centered in the ROI-->
-  <arg name="roi_width" value="50.0" /> <!-- (m) x -->
-  <arg name="roi_height" value="50.0" /> <!-- (m) y -->
+  <!--We assume that the robot is centered in the ROI-->
+
+  <!--Size of the ROI-->
+  <arg name="roi_width" value="35.0" /> <!-- (m) x -->
+  <arg name="roi_height" value="35.0" /> <!-- (m) y -->
   <arg name="roi_altitude" value="0.0" /> <!-- (m) z NOT USED-->
   <arg name="resolution" value="0.1" /> <!-- (m/tile)-->
   
@@ -19,7 +21,7 @@
     <param name="tile_origin_tf_sufix_for_roi_origin" type="string" value="_ROI_ORIGIN" />
     <param name="tile_parent_tf" type="string" value="odom" />
     <param name="odometry_topic" type="string" value="/odometry/filtered" />
-    <param name="navsat_topic" type="string" value="/gps/filtered/utm" />
+    <param name="navsat_topic" type="string" value="/bridge/S10Gps/navSatFix" /> <?undefined Should be /ekf/S10Gps from navsat_odom_to_gps_node ?>
     <param name="roi_too_origin_trans_width" value="$(eval -arg('roi_width') / 2)" />
     <param name="roi_too_origin_trans_height" value="$(eval -arg('roi_height') / 2)" />
     <param name="roi_too_origin_trans_altitude" value="$(eval -arg('roi_altitude') / 2)" />
@@ -39,18 +41,19 @@
   </node>
   
   <!--Raw server for Structure-from-Motion Algorithm-->
-  <node pkg="mapserver" name="mapserver_raw_SFM_node" type="mapserver_raw_node">
+<!--  <node pkg="mapserver" name="mapserver_raw_SFM_node" type="mapserver_raw_node">
     <param name="world_link" type="string" value="odom" />
     <param name="tile_origin_tf_prefix" type="string" value="map_base_link_" />
     <param name="tile_origin_tf_sufix_for_roi_origin" type="string" value="_ROI_ORIGIN" />
     <param name="current_tf_name_topic" type="string" value="/currentTfTile" />
     <param name="current_tuple_topic" type="string" value="/currentTuple" />
     <param name="shift_map" type="int" value="1" />
-    <param name="topic_data" type="string" value="/sfm_point_cloud" /> <!--TODO-->
+    <param name="topic_data" type="string" value="/sfm_point_cloud" /> <?undefined TODO ?>
     <param name="topic_data_is_point_cloud" type="int" value="1" />
     <param name="dont_store_maps" type="int" value="1" />
     <param name="send_top_layer_of_distancestack_as_ogm" type="int" value="1" />
-    <param name="debug" type="int" value="0" />
+    <param name="send_top_layer_of_distancestack_as_ogm_topic" type="string" value="/debug/map_raw/SFM" />
+    <param name="debug" type="int" value="1" />
     <param name="debug_draw_rpc_in_view" type="int" value="0" />
     <param name="max_x_m" value="$(eval arg('roi_width') / 2)" />
     <param name="max_y_m" value="$(eval arg('roi_height') / 2)" />
@@ -58,7 +61,7 @@
     <param name="min_y_m" value="$(eval -arg('roi_height') / 2)" />
     <param name="resolution" value="$(arg resolution)" />
     <param name="map_storage_location" value="/tmp/" />
-  </node>
+  </node>-->
   
   <node pkg="mapserver" name="mapserver_raw_LASE2000_1_node" type="mapserver_raw_node" output="screen">
     <param name="world_link" type="string" value="odom" />
@@ -70,8 +73,9 @@
     <param name="topic_data" type="string" value="/sense/LASE2000D/1" />
     <param name="topic_data_is_point_cloud" type="int" value="0" />
     <param name="dont_store_maps" type="int" value="1" />
-    <param name="send_top_layer_of_distancestack_as_ogm" type="int" value="0" />
-    <param name="debug" type="int" value="0" />
+    <param name="send_top_layer_of_distancestack_as_ogm" type="int" value="1" />
+    <param name="send_top_layer_of_distancestack_as_ogm_topic" type="string" value="/debug/map_raw/LASE2000_1" />
+    <param name="debug" type="int" value="1" />
     <param name="debug_draw_rpc_in_view" type="int" value="0" />
     <param name="max_x_m" value="$(eval arg('roi_width') / 2)" />
     <param name="max_y_m" value="$(eval arg('roi_height') / 2)" />
@@ -111,112 +115,6 @@
     <param name="storage_format_name" value="" />
     <param name="storage_unit_name" value="logodds" />
     <param name="mapInit_value" type="int" value="0" />
-    <rosparam command="load" file="$(find mapserver)/yaml/blindspots.yaml" />
   </node>
 
  </launch>
-
-<?undefined
-mapInit_value look-up for mapserver_stat
-0.000: -127
-0.010: -77
-0.020: -66
-0.030: -60
-0.040: -51
-0.050: -48
-0.060: -45
-0.070: -43
-0.080: -39
-0.090: -38
-0.100: -36
-0.110: -35
-0.120: -32
-0.130: -31
-0.140: -30
-0.150: -28
-0.160: -27
-0.170: -26
-0.180: -25
-0.190: -23
-0.200: -22
-0.210: -22
-0.220: -21
-0.230: -19
-0.240: -19
-0.250: -18
-0.260: -17
-0.270: -16
-0.280: -15
-0.290: -15
-0.300: -14
-0.310: -13
-0.320: -12
-0.330: -12
-0.340: -11
-0.350: -10
-0.360: -10
-0.370: -9
-0.380: -8
-0.390: -7
-0.400: -7
-0.410: -6
-0.420: -5
-0.430: -5
-0.440: -4
-0.450: -3
-0.460: -3
-0.470: -2
-0.480: -2
-0.490: -1
-0.500: 0
-0.510: 0
-0.520: 1
-0.530: 2
-0.540: 2
-0.550: 3
-0.560: 4
-0.570: 4
-0.580: 5
-0.590: 5
-0.600: 6
-0.610: 7
-0.620: 7
-0.630: 9
-0.640: 9
-0.650: 10
-0.660: 10
-0.670: 11
-0.680: 12
-0.690: 12
-0.700: 13
-0.710: 14
-0.720: 15
-0.730: 15
-0.740: 16
-0.750: 17
-0.760: 18
-0.770: 19
-0.780: 20
-0.790: 21
-0.800: 22
-0.810: 22
-0.820: 24
-0.830: 25
-0.840: 26
-0.850: 27
-0.860: 29
-0.870: 30
-0.880: 31
-0.890: 33
-0.900: 35
-0.910: 36
-0.920: 38
-0.930: 41
-0.940: 43
-0.950: 45
-0.960: 48
-0.970: 55
-0.980: 60
-0.990: 66
-1.000: 77
-?>

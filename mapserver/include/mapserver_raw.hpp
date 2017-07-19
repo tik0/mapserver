@@ -38,25 +38,46 @@ class MapserverRaw : public Mapserver<short, nav_msgs::OccupancyGrid, short,
   }
   ;
 
-  ros::Publisher publisherMap;
+  //! The subscriber for the sensor data (Laser, Pointcloud, or Pointcloud2)
   ros::Subscriber subscriberData;
+  //! A projector to transform laser data into point cloud data
   laser_geometry::LaserProjection projector;
 
-  // Variables
-  std::string topicMap;
+  //! The common data topic
   std::string topicData;
+  //! Define the data which is received via topicData (0: Laser, 1: Pointcloud, 2: Pointcloud2)
   int topicDataIsPointCloud;
+  //! Cutoff distance
   float maxDistanceInsertion_m;
-  int debugDrawRpc = 0;
-  int sendTopLayerOfDistanceAsOgm;
-  cv::Mat storageMapBuffer;
-  int maxLayer;
-  std::shared_ptr<std::vector<cv::Mat>> currentMapHeight_mm, lastMapHeight_mm;
-  std::shared_ptr<std::vector<cv::Mat>> currentPulsewidth_ps, lastPulsewidth_ps;
-  std::shared_ptr<std::vector<cv::Mat>> currentMapIterator, lastMapIterator;
-  cv::Mat mapIterator_1, mapIterator_2;  // Pointer to the current position in the mapHeight map
 
-  // Services
+  // MAPSERVER STORAGE STRUCTURE
+  //! Common buffer
+  cv::Mat storageMapBuffer;
+  //! Number of layers
+  int maxLayer;
+  //! Double buffer for heights
+  std::shared_ptr<std::vector<cv::Mat>> currentMapHeight_mm, lastMapHeight_mm;
+  //! Double buffer for inensities
+  std::shared_ptr<std::vector<cv::Mat>> currentPulsewidth_ps, lastPulsewidth_ps;
+  //! Double buffer for the iterator
+  std::shared_ptr<std::vector<cv::Mat>> currentMapIterator, lastMapIterator;
+  //! Pointer to the current position in the mapHeight map
+  cv::Mat mapIterator_1, mapIterator_2;
+
+  // DEBUG STUFF
+  //! Shows the RPCs as OpenCV images if true
+  int debugDrawRpc = 0;
+  //! Send the top layer of the mapstack if true
+  int sendTopLayerOfDistanceAsOgm;
+  //! Topic over which the top layer of the mapstack is published
+  std::string topicMap;
+  //! Publisher over which the top layer of the mapstack is published
+  ros::Publisher publisherMap;
+  // Debug stuff for service RPC
+  cv::Mat mapStackStatisticRequestDebug, mapStackStatisticDebug;
+  cv::RotatedRect rect;
+
+  //! Services
   ros::ServiceServer service_meanHeight;
   ros::ServiceServer service_varianceHeight;
   ros::ServiceServer service_quantil90Height;
@@ -66,11 +87,14 @@ class MapserverRaw : public Mapserver<short, nav_msgs::OccupancyGrid, short,
   ros::ServiceServer service_quantil90Pulsewidth;
   ros::ServiceServer service_quantil95Pulsewidth;
 
-  // Debug stuff for service RPC
-  cv::Mat mapStackStatisticRequestDebug, mapStackStatisticDebug;
-  cv::RotatedRect rect;
-
-  // Translate a map
+  ///
+  /// \brief Translate a map
+  /// \param src Input image
+  /// \param dst Result image
+  /// \param offsetx Offset in x direction in pixel
+  /// \param offsety Offset in y direction in pixel
+  /// \param fillValue Value to fill up the boarders
+  ///
   template<typename T>
   void translateMap(cv::Mat &src, cv::Mat &dst, double offsetx = 0,
                     double offsety = 0, T fillValue =
@@ -102,6 +126,19 @@ class MapserverRaw : public Mapserver<short, nav_msgs::OccupancyGrid, short,
       bool storeCurrentPosition = true /*unused*/,
       std::string additionalInformationString = std::string(""),
       ros::Time storageTime = ros::Time::now());
+
+  ///
+  /// \brief Wrapper for mapRefreshAndStorage when it comes to a new tile
+  /// \param transformRoiInWorld Transform from the current ROI (mapStack should be already deprecated) to the world frame
+  /// \param storeCurrentPosition Stores the current ROI position to relate to it for the next storage (necessary for shifting)
+  /// \param additionalInformationString Some arbitrary string which can be added to the file name
+  /// \param storageTime The timestamp which is used in the filenames
+  ///
+  virtual void mapRefreshAndStorageOnTileChange(
+      const tf::StampedTransform &transformRoiInWorld,
+      const bool storeCurrentPosition = true,
+      const std::string &additionalInformationString = std::string(""),
+      const ros::Time &storageTime = ros::Time::now());
 
   ///
   /// \brief Transforms the received laser messages into the map frame and stores them in the next free map layer
@@ -265,11 +302,14 @@ class MapserverRaw : public Mapserver<short, nav_msgs::OccupancyGrid, short,
     return true;
   }
 
+  ///
+  /// \brief Sends the top layer of the mapstack
+  ///
   void sendMap(void) {
     if (sendTopLayerOfDistanceAsOgm) {
       // Send the top layer as occupancy grid map
       mtxSwap.lock();
-      const std::string frameTarget(currentTileTfName);
+      std::string frameTarget(currentTileTfName);
       std::shared_ptr<std::vector<cv::Mat>> mapHeight_mm = currentMapHeight_mm;
       mtxSwap.unlock();
       nav_msgs::OccupancyGrid ogm;
@@ -292,16 +332,22 @@ class MapserverRaw : public Mapserver<short, nav_msgs::OccupancyGrid, short,
   }
 
   ///
-  /// \brief Store the current tf tile name
-  /// \param nameMsg Name of the current tile tf
+  /// \brief Swaps all necessary stacks
   ///
-  virtual void tfTileNameHandler(const std_msgs::String nameMsg);
+  virtual void swapStack() {
+    std::swap(this->currentMapHeight_mm, this->lastMapHeight_mm);
+    std::swap(this->currentPulsewidth_ps, this->lastPulsewidth_ps);
+    std::swap(this->currentMapIterator, this->lastMapIterator);
+  }
 
   ///
-  /// \brief Store the current tf tile name and swap the storage
-  /// \param msg tuple of position, NavSat, and name name of the current tile tf
+  /// \brief Evaluates condition for storing refreshing and storing the mapstack
+  /// \return True if all mapstacks are ready to be stored and swapped
   ///
-  virtual void tupleHandler(const mapserver_msgs::pnsTuple msg);
+  virtual bool mapRefreshAndStorageCondition() {
+    // The last map is hold by another process
+    return ((lastMapHeight_mm.unique() && lastPulsewidth_ps.unique() && lastMapIterator.unique()));
+  }
 
   ///
   /// \brief Shows the current RPC if debug is on
@@ -364,7 +410,6 @@ MapserverRaw::MapserverRaw(ros::NodeHandle &nh)
     : Mapserver(&nh),
       n(nh) {
 
-  n.param<std::string>("topic_map", topicMap, "/map");
   n.param<std::string>("topic_data", topicData, scopes::root);
   n.param<int>("topic_data_is_point_cloud", topicDataIsPointCloud, 0);
   n.param<float>("max_distance_insertion_m", maxDistanceInsertion_m,
@@ -372,6 +417,7 @@ MapserverRaw::MapserverRaw(ros::NodeHandle &nh)
   n.param<int>("max_layer", maxLayer, 20);
   n.param<int>("send_top_layer_of_distancestack_as_ogm",
                sendTopLayerOfDistanceAsOgm, 1);
+  n.param<std::string>("send_top_layer_of_distancestack_as_ogm_topic", topicMap, "/debug/map");
   n.param<int>("debug_draw_rpc_in_view", debugDrawRpc, 0);
 
   publisherMap = n.advertise<nav_msgs::OccupancyGrid>(topicMap, 1);

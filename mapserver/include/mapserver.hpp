@@ -197,7 +197,6 @@ class Mapserver {
   /// \param nameMsg Name of the current tile tf
   ///
   void tfTileNameHandlerCb(const std_msgs::String &nameMsg) {
-    std::cerr << "Called tfTileNameHandlerCb\n";
     tfTileNameHandler(nameMsg);
   };
 
@@ -206,7 +205,6 @@ class Mapserver {
   /// \param msg tuple of position, NavSat, and name name of the current tile tf
   ///
   void tupleHandlerCb(const mapserver_msgs::pnsTuple &msg) {
-    std::cerr << "Called tupleHandlerCb\n";
     tupleHandler(msg);
   };
 
@@ -351,9 +349,6 @@ class Mapserver {
 
   }
 
-
- private:
-
   ///
   /// \brief Polling to check if all references on the mapstacks are gone (Waits 2 seconds in standard configuration)
   /// \param lockCntMax Polling cycles, s.t. how often to check for references gone
@@ -408,7 +403,7 @@ class Mapserver {
   virtual void storeMaps(const mapserver_msgs::StringStamped nameMsg);
 
   ///
-  /// \brief Swaps all necessary stacks (Needs to be redefined if )
+  /// \brief Swaps all necessary stacks
   ///
   virtual void swapStack();
 
@@ -460,10 +455,23 @@ class Mapserver {
       const std::string prefixString, const std::string formatString,
       const std::string formatUnitString, const double resolution_meterPerTile,
       const bool storeMapStack, const bool shiftMapStack,
-      const bool clearMapStack, TValue fillValue, bool storeCurrentPosition =
-          true,
+      const bool clearMapStack, TValue fillValue,
+      bool storeCurrentPosition = true,
       std::string additionalInformationString = std::string(""),
       ros::Time storageTime = ros::Time::now());
+
+  ///
+  /// \brief Wrapper for mapRefreshAndStorage when it comes to a new tile
+  /// \param transformRoiInWorld Transform from the current ROI (mapStack should be already deprecated) to the world frame
+  /// \param storeCurrentPosition Stores the current ROI position to relate to it for the next storage (necessary for shifting)
+  /// \param additionalInformationString Some arbitrary string which can be added to the file name
+  /// \param storageTime The timestamp which is used in the filenames
+  ///
+  virtual void mapRefreshAndStorageOnTileChange(
+      const tf::StampedTransform &transformRoiInWorld,
+      const bool storeCurrentPosition = true,
+      const std::string &additionalInformationString = std::string(""),
+      const ros::Time &storageTime = ros::Time::now());
 
   ///
   /// \brief Translates the content of a map and fills up the boarders
@@ -664,6 +672,7 @@ bool Mapserver<TMapstack, TData, TValue, TChild>::mapRefreshAndStorageCondition(
 template<typename TMapstack, typename TData, typename TValue, typename TChild>
 void Mapserver<TMapstack, TData, TValue, TChild>::tfTileNameHandler(
     const std_msgs::String nameMsg) {
+
   bool currentTileTfNameChange = false;
   mapRefresh.lock();
   if ((nameMsg.data.back() != currentTileTfName.back())) {
@@ -695,17 +704,7 @@ void Mapserver<TMapstack, TData, TValue, TChild>::tfTileNameHandler(
 
     // Wait until all references are gone
     if (this->referencesGoneWaiter()) {
-      mapRefreshAndStorage(lastMapStack,             // Map to shift/store/reset
-          currentMapStack,                      // The result of the shifted map
-          transformRoiInWorld,                   // Transform
-          storageNameMapKind,                    // Kind of map
-          storageNameFormat,         // Format (empty: Take from type specifier)
-          storageNameUnit,                       // Unit
-          resolution_mPerTile,                   // Resolution per tile
-          !dontStoreMaps,                       // Info if maps should be stored
-          bool(shiftMap),                      // Info if maps should be shifted
-          !shiftMap,     // If map is not shifted, reset the content of mapStack
-          mapInitValue);  // Fill-up value
+      mapRefreshAndStorageOnTileChange(transformRoiInWorld);
     }
   }
 
@@ -716,6 +715,7 @@ void Mapserver<TMapstack, TData, TValue, TChild>::tfTileNameHandler(
 template<typename TMapstack, typename TData, typename TValue, typename TChild>
 void Mapserver<TMapstack, TData, TValue, TChild>::tupleHandler(
     const mapserver_msgs::pnsTuple msg) {
+
   bool currentTileTfNameChange = false;
 
   mapRefresh.lock();
@@ -735,6 +735,7 @@ void Mapserver<TMapstack, TData, TValue, TChild>::tupleHandler(
 
   if (currentTileTfNameChange) {
     ROS_INFO("NEW MAP");
+    // We get the new location directly from the message
     tf::StampedTransform transformRoiInWorld;
     transformRoiInWorld.setOrigin(
         tf::Vector3(msg.point.x, msg.point.y, msg.point.z));
@@ -748,18 +749,9 @@ void Mapserver<TMapstack, TData, TValue, TChild>::tupleHandler(
                << lastPnsTuple->navsat.longitude << "_" << "alt_"
                << lastPnsTuple->navsat.altitude;
 
-      mapRefreshAndStorage(lastMapStack,         // Map to shift/store/reset
-          currentMapStack,                      // The result of the shifted map
-          transformRoiInWorld,                   // Transform
-          storageNameMapKind,                    // Kind of map
-          storageNameFormat,         // Format (empty: Take from type specifier)
-          storageNameUnit,                       // Unit
-          resolution_mPerTile,                   // Resolution per tile
-          !dontStoreMaps,                       // Info if maps should be stored
-          bool(shiftMap),                      // Info if maps should be shifted
-          !shiftMap,     // If map is not shifted, reset the content of mapStack
-          mapInitValue,                          // Fill-up value
-          true, navSatSs.str(), msg.header.stamp);
+      // Store the mapstack
+      mapRefreshAndStorageOnTileChange(transformRoiInWorld, true, navSatSs.str(), msg.header.stamp);
+
       // Store the current tile information as next last one
       *lastPnsTuple = msg;
     }
@@ -768,6 +760,7 @@ void Mapserver<TMapstack, TData, TValue, TChild>::tupleHandler(
   mapRefresh.unlock();
 }
 
+
 template<typename TMapstack, typename TData, typename TValue, typename TChild>
 bool Mapserver<TMapstack, TData, TValue, TChild>::referencesGoneWaiter(
     const std::size_t lockCntMax, const std::size_t wait_us) {
@@ -775,13 +768,14 @@ bool Mapserver<TMapstack, TData, TValue, TChild>::referencesGoneWaiter(
   while (!this->mapRefreshAndStorageCondition()) {
     if (++lockCnt > lockCntMax) {
       ROS_ERROR(
-          "tfTileNameHandler: Locked for to long, skip storage (maybe deadlock or out if resources?)");
+          "referencesGoneWaiter: Locked for to long, skip storage (maybe deadlock or out if resources?)");
       return false;
     }
     usleep(wait_us);
   }
   return true;
 }
+
 
 template<typename TMapstack, typename TData, typename TValue, typename TChild>
 void Mapserver<TMapstack, TData, TValue, TChild>::storeMaps(
@@ -939,6 +933,26 @@ Mapserver<TMapstack, TData, TValue, TChild>::Mapserver(ros::NodeHandle *nh)
 }
 
 template<typename TMapstack, typename TData, typename TValue, typename TChild>
+void Mapserver<TMapstack, TData, TValue, TChild>::mapRefreshAndStorageOnTileChange (
+    const tf::StampedTransform &transformRoiInWorld, const bool storeCurrentPosition,
+        const std::string &additionalInformationString, const ros::Time &storageTime) {
+  mapRefreshAndStorage(lastMapStack,        // Map to shift/store/reset
+      currentMapStack,                      // The result of the shifted map
+      transformRoiInWorld,                  // Transform
+      storageNameMapKind,                   // Kind of map
+      storageNameFormat,                    // Format (empty: Take from type specifier)
+      storageNameUnit,                      // Unit
+      resolution_mPerTile,                  // Resolution per tile
+      !dontStoreMaps,                       // Info if maps should be stored
+      bool(shiftMap),                       // Info if maps should be shifted
+      !shiftMap,     // If map is not shifted, reset the content of mapStack
+      mapInitValue,                          // Fill-up value
+      storeCurrentPosition,
+      additionalInformationString,
+      storageTime);
+}
+
+template<typename TMapstack, typename TData, typename TValue, typename TChild>
 void Mapserver<TMapstack, TData, TValue, TChild>::mapRefreshAndStorage(
     const std::shared_ptr<std::map<std::string, TMapstack*>> &mapStack,
     const std::shared_ptr<std::map<std::string, TMapstack*>> &mapStackShiftedResult,
@@ -1035,15 +1049,15 @@ void Mapserver<TMapstack, TData, TValue, TChild>::mapRefreshAndStorage(
     const double zdiff_m = transformRoiInWorldLast.getOrigin().y()
         - transformRoiInWorld.getOrigin().y();
 
-    ROS_INFO("Current (x,y,z) in m: %f, %f, %f",
+    ROS_DEBUG("Current (x,y,z) in m: %f, %f, %f",
              transformRoiInWorld.getOrigin().x(),
              transformRoiInWorld.getOrigin().y(),
              transformRoiInWorld.getOrigin().z());
-    ROS_INFO("Last    (x,y,z) in m: %f, %f, %f",
+    ROS_DEBUG("Last    (x,y,z) in m: %f, %f, %f",
              transformRoiInWorldLast.getOrigin().x(),
              transformRoiInWorldLast.getOrigin().y(),
              transformRoiInWorldLast.getOrigin().z());
-    ROS_INFO("Diff    (x,y,z) in m: %f, %f, %f", xdiff_m, ydiff_m, zdiff_m);
+    ROS_DEBUG("Diff    (x,y,z) in m: %f, %f, %f", xdiff_m, ydiff_m, zdiff_m);
 
     const int xshift_tiles = int(std::round(xdiff_m / resolution_meterPerTile));
     const int yshift_tiles = int(std::round(ydiff_m / resolution_meterPerTile));
@@ -1054,7 +1068,7 @@ void Mapserver<TMapstack, TData, TValue, TChild>::mapRefreshAndStorage(
 //                     "\n-ydiff_m / resolution_meterPerTile: " << ydiff_m / resolution_meterPerTile <<
 //                     "\n-ydiff_m / resolution_meterPerTile: " << ydiff_m / resolution_meterPerTile);
 
-    ROS_INFO(
+    ROS_DEBUG(
         "Shift of the map (res: %0.2f m/tile): x=%d tiles s.t. %f m , y=%d tiles s.t. %f m",
         resolution_meterPerTile, xshift_tiles, -xdiff_m, yshift_tiles,
         -ydiff_m);
