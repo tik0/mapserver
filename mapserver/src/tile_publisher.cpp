@@ -23,10 +23,11 @@ namespace numerics = constants::numeric;
 #include <message_filters/subscriber.h>
 #include <message_filters/synchronizer.h>
 #include <message_filters/sync_policies/exact_time.h>
+#include <message_filters/sync_policies/approximate_time.h>
 
 ros::Subscriber subOdom;
 tf::TransformBroadcaster *brTf;
-typedef message_filters::sync_policies::ExactTime<nav_msgs::Odometry,
+typedef message_filters::sync_policies::ApproximateTime<nav_msgs::Odometry,
     sensor_msgs::NavSatFix> syncPolicy;
 
 static std::string tileParentTf("odom");
