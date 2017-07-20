@@ -13,6 +13,7 @@ namespace numerics = constants::numeric;
 #include <ros/console.h>
 #include <nav_msgs/Odometry.h>
 #include <sensor_msgs/NavSatFix.h>
+#include <sensor_msgs/Imu.h>
 #include <mapserver_msgs/pnsTuple.h>
 #include <geometry_msgs/Point.h>
 #include <std_msgs/String.h>
@@ -28,13 +29,16 @@ namespace numerics = constants::numeric;
 ros::Subscriber subOdom;
 tf::TransformBroadcaster *brTf;
 typedef message_filters::sync_policies::ApproximateTime<nav_msgs::Odometry,
-    sensor_msgs::NavSatFix> syncPolicy;
+    sensor_msgs::NavSatFix> syncPolicy_odomNav;
+typedef message_filters::sync_policies::ApproximateTime<nav_msgs::Odometry,
+    sensor_msgs::NavSatFix, sensor_msgs::Imu> syncPolicy_odomNavImu;
 
 static std::string tileParentTf("odom");
 static std::string tileOriginTfPrefix("map_base_link_");
 static std::string tileOriginTfSufixForRoiOrigin("_ROI_ORIGIN");
 static std::string topicOdom("/bridge/Odom/S10Gps/filtered");
 static std::string topicNavsat("");
+static std::string topicImu("");
 static std::string currentTfNameTopic("/currentTfTile");
 static std::string currentTupleTopic("/currentTuple");
 static double idleStartupTime_s = -1.0;
@@ -43,7 +47,8 @@ static double tfPublishRate = 50, tfNamePublishDelay = 0.5;
 static std::size_t tfNamePublishDelayCounter = 0;
 static int zFix = 1;  // Omit altitude
 std::mutex mtx;
-typedef std::tuple<geometry_msgs::Point, sensor_msgs::NavSatFix, std::string> pnsTuple;
+typedef double yaw_t;
+typedef std::tuple<geometry_msgs::Point, sensor_msgs::NavSatFix, yaw_t, std::string> pnsTuple;
 static std::vector<pnsTuple> tileCenterHistory;
 static double boundingBoxWidth;
 static double boundingBoxHeight;
@@ -59,12 +64,14 @@ Eigen::Matrix4d roi_roiOrigin;
 enum tupleEnum {
   pos = 0,
   nav = 1,
-  name = 2
+  yaw = 2,
+  name = 3
 };
 
 void messageHandler(const nav_msgs::Odometry odomMsg,
                     const sensor_msgs::NavSatFix navsatMsg =
-                        sensor_msgs::NavSatFix()) {
+                        sensor_msgs::NavSatFix(),
+                    const sensor_msgs::Imu::ConstPtr imuMsg = NULL) {
   if (tileParentTf.compare(odomMsg.header.frame_id)) {
     ROS_WARN_ONCE("%s != %s, this might be OK if the two frames coincide",
                   tileParentTf.c_str(), odomMsg.header.frame_id.c_str());
@@ -102,10 +109,25 @@ void messageHandler(const nav_msgs::Odometry odomMsg,
     }
   }
 
-  // Reset the map
+  // Calculate the real orientation of the tile in the world
+  double yawWorld = 0;
+  if (imuMsg) {
+    if (imuMsg->header.frame_id.compare(odomMsg.header.frame_id) != 0) {
+      ROS_WARN_STREAM_ONCE("IMU frame_id does not match odom frame_id: " <<
+                           imuMsg->header.frame_id << " != " << odomMsg.header.frame_id
+                           << "\nYaw orientation might be tainted!");
+    }
+    tf::Quaternion qImu, qOdom;
+    tf::quaternionMsgToTF(odomMsg.pose.pose.orientation, qOdom);
+    tf::quaternionMsgToTF(imuMsg->orientation, qImu);
+    yawWorld = tf::getYaw(qImu) - tf::getYaw(qOdom);
+  }
+
+  // Fill the pns tuple
   mtx.lock();
   tileCenterHistory.push_back(
       pnsTuple(odomMsg.pose.pose.position, navsatMsg,
+               yawWorld,
                tileOriginTfPrefix + std::to_string(tileCenterHistory.size())));
   tfNamePublishDelayCounter = 0;
   mtx.unlock();
@@ -122,6 +144,12 @@ void odomHandler(const nav_msgs::Odometry::ConstPtr odomMsg) {
 void odomNavsatHandler(const nav_msgs::Odometry::ConstPtr odomMsg,
                        const sensor_msgs::NavSatFix::ConstPtr navsatMsg) {
   messageHandler(*odomMsg, *navsatMsg);
+}
+
+void odomNavsatImuHandler(const nav_msgs::Odometry::ConstPtr odomMsg,
+                          const sensor_msgs::NavSatFix::ConstPtr navsatMsg,
+                          const sensor_msgs::Imu::ConstPtr imuMsg) {
+  messageHandler(*odomMsg, *navsatMsg, imuMsg);
 }
 
 ///
@@ -185,6 +213,7 @@ int main(int argc, char **argv) {
   n.param<std::string>("odometry_topic", topicOdom,
                        "/bridge/Odom/S10Gps/filtered");
   n.param<std::string>("navsat_topic", topicNavsat, "");
+  n.param<std::string>("imu_topic", topicImu, "");
   n.param<std::string>("current_tf_name_topic", currentTfNameTopic,
                        "/currentTfTile");
   n.param<std::string>("current_tuple_topic", currentTupleTopic,
@@ -235,16 +264,27 @@ int main(int argc, char **argv) {
   ros::Publisher currentTuplePublisher = n.advertise<mapserver_msgs::pnsTuple>(
       currentTupleTopic, 1);
   message_filters::Subscriber<nav_msgs::Odometry> odom_sub(n, topicOdom, 1);
-  message_filters::Subscriber<sensor_msgs::NavSatFix> navsat_sub(n, topicNavsat,
-                                                                 1);
-  message_filters::Synchronizer<syncPolicy> sync(syncPolicy(10), odom_sub,
-                                                 navsat_sub);
+  message_filters::Subscriber<sensor_msgs::NavSatFix> navsat_sub(n, topicNavsat, 1);
+  message_filters::Subscriber<sensor_msgs::Imu> imu_sub(n, topicImu, 1);
+  message_filters::Synchronizer<syncPolicy_odomNav> sync_odomNav(syncPolicy_odomNav(10),
+                                                               odom_sub,
+                                                               navsat_sub);
+  message_filters::Synchronizer<syncPolicy_odomNavImu> sync_odomNavImu(syncPolicy_odomNavImu(10),
+                                                                  odom_sub,
+                                                                  navsat_sub,
+                                                                  imu_sub);
 
   if (topicNavsat.empty()) {
-    ROS_WARN("Don't use NAVSAT messages");
+    ROS_WARN("Don't use NAVSAT nor IMU messages");
     subOdom = n.subscribe<nav_msgs::Odometry>(topicOdom, 2, odomHandler);
   } else {
-    sync.registerCallback(boost::bind(&odomNavsatHandler, _1, _2));
+    if (topicImu.empty()) {
+      ROS_WARN("Don't use IMU messages");
+      sync_odomNav.registerCallback(boost::bind(&odomNavsatHandler, _1, _2));
+    } else {
+      ROS_INFO("Use NAVSAT and IMU messages");
+      sync_odomNavImu.registerCallback(boost::bind(&odomNavsatImuHandler, _1, _2, _3));
+    }
   }
 
   // Start the processing
@@ -278,6 +318,7 @@ int main(int argc, char **argv) {
         currentTuple.header.stamp = ros::Time::now();
         currentTuple.string.data = std::get<tupleEnum::name>(pns);
         currentTuple.point = std::get<tupleEnum::pos>(pns);
+        currentTuple.yaw = std::get<tupleEnum::yaw>(pns);
         currentTuple.navsat = std::get<tupleEnum::nav>(pns);
         currentTuplePublisher.publish(currentTuple);
       }

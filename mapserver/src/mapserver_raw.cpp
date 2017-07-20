@@ -277,8 +277,8 @@ void MapserverRaw::mapRefreshAndStorage(
 
   if (storeMapStack) {
     // Get the timestamp in microseconds
-    uint64_t timestamp = uint64_t(transformRoiInWorld.stamp_.sec)
-        * uint64_t(1e6) + uint64_t(transformRoiInWorld.stamp_.nsec / 1e6);
+//    uint64_t timestamp = uint64_t(transformRoiInWorld.stamp_.sec)
+//        * uint64_t(1e6) + uint64_t(transformRoiInWorld.stamp_.nsec / 1e6);
     // Store each layer in the map
     for (int mapIdx = 0; mapIdx < maxLayer; ++mapIdx) {
       // Get the format string
@@ -288,11 +288,28 @@ void MapserverRaw::mapRefreshAndStorage(
               formatString;
       // Get the filename
       std::ostringstream oss;
-      oss << mapStorageLocation << "What_" << prefixString << "_"
-          << "Timestamp_" << timestamp << "us_" << "Format_" << format << "_"
-          << "Unit_" << formatUnitString << "_" << "LayerIdx_" << mapIdx << "_"
-          << "GridRes_"
-          << resolution_meterPerTile * geometry::millimeterPerMeter << "mm_"
+      oss << mapStorageLocation
+          << "What_"
+          << prefixString
+          << "_"
+          << "T_"
+          << storageTime
+          << "s.ns_"
+          << "Format_"
+          << format
+          << "_"
+          << "Unit_"
+          << formatUnitString
+          << "_"
+          << "Layer_"
+          << mapIdx
+          << "_"
+          << "Res_"
+          << int(
+              round(
+                  resolution_meterPerTile
+                      * double(constants::geometry::millimeterPerMeter)))
+          << "mm_"
           << "X_" << transformRoiInWorld.getOrigin().x() << "m_" << "Y_"
           << transformRoiInWorld.getOrigin().y() << "m_" << "Z_"
           << transformRoiInWorld.getOrigin().z() << "m_" << "rows_"

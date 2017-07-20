@@ -22,6 +22,7 @@
     <param name="tile_parent_tf" type="string" value="odom" />
     <param name="odometry_topic" type="string" value="/odometry/filtered" />
     <param name="navsat_topic" type="string" value="/bridge/S10Gps/navSatFix" /> <?undefined Should be /ekf/S10Gps from navsat_odom_to_gps_node ?>
+    <param name="imu_topic" type="string" value="/bridge/S10Gps/imu" />
     <param name="roi_too_origin_trans_width" value="$(eval -arg('roi_width') / 2)" />
     <param name="roi_too_origin_trans_height" value="$(eval -arg('roi_height') / 2)" />
     <param name="roi_too_origin_trans_altitude" value="$(eval -arg('roi_altitude') / 2)" />
@@ -72,7 +73,7 @@
     <param name="shift_map" type="int" value="1" />
     <param name="topic_data" type="string" value="/sense/LASE2000D/1" />
     <param name="topic_data_is_point_cloud" type="int" value="0" />
-    <param name="dont_store_maps" type="int" value="1" />
+    <param name="dont_store_maps" type="int" value="0" />
     <param name="send_top_layer_of_distancestack_as_ogm" type="int" value="1" />
     <param name="send_top_layer_of_distancestack_as_ogm_topic" type="string" value="/debug/map_raw/LASE2000_1" />
     <param name="debug" type="int" value="1" />

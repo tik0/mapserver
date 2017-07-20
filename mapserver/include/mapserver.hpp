@@ -744,10 +744,12 @@ void Mapserver<TMapstack, TData, TValue, TChild>::tupleHandler(
     // Wait until all references are gone and then store the maps
     if (this->referencesGoneWaiter()) {
       std::stringstream navSatSs;
-      navSatSs << std::setprecision(12) << "lat_"
+      navSatSs << std::fixed
+               << std::setprecision(7) << "lat_"
                << lastPnsTuple->navsat.latitude << "_" << "lon_"
                << lastPnsTuple->navsat.longitude << "_" << "alt_"
-               << lastPnsTuple->navsat.altitude;
+               << lastPnsTuple->navsat.altitude << "_" << "yaw_"
+               << std::setprecision(3) << lastPnsTuple->yaw;
 
       // Store the mapstack
       mapRefreshAndStorageOnTileChange(transformRoiInWorld, true, navSatSs.str(), msg.header.stamp);
