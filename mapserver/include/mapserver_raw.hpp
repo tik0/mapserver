@@ -355,7 +355,7 @@ class MapserverRaw : public Mapserver<short, nav_msgs::OccupancyGrid, short,
   void showRpc() {
     if (debug) {
       ROS_INFO("DEBUG: Show the requests");
-      if (mapStackStatisticDebug.empty() || mapStackStatisticDebug.empty()) {
+      if (mapStackStatisticDebug.empty() || mapStackStatisticRequestDebug.empty()) {
         ROS_ERROR("mapStackStatistic is empty");
         return;
       }
@@ -363,8 +363,8 @@ class MapserverRaw : public Mapserver<short, nav_msgs::OccupancyGrid, short,
       mtxShowRpc.lock();
       mapStackStatisticRequestDebug.copyTo(mapStackStatisticRequestDebugTmp);
       mapStackStatisticDebug.copyTo(mapStackStatisticDebugTmp);
-      mapStackStatisticDebugTmp.release();
-      mapStackStatisticRequestDebugTmp.release();
+      mapStackStatisticDebug.release();
+      mapStackStatisticRequestDebug.release();
       cv::RotatedRect rectTmp = rect;
       mtxShowRpc.unlock();
 

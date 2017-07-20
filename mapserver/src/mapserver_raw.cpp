@@ -66,7 +66,7 @@ void MapserverRaw::getStatisticOutput(
 
   mtxSwap.lock();
   const std::shared_ptr<std::vector<cv::Mat>> mapHeight_mm = input;
-  const std::string targetframe_id(currentTileTfName + tileOriginTfSufixForRoiOrigin);
+  const std::string targetframe_id(currentTileTfName);
   mtxSwap.unlock();
 
   // Get the cropped statistic with respect to view

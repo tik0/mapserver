@@ -1091,7 +1091,7 @@ bool MapserverStat::mapStatServerSingleLayerOgm(mapserver::ism::Request &req,
 
   mapRefresh.lock();
   auto mapStack = currentMapStack;
-  std::string targetFrame_id = currentTileTfName + tileOriginTfSufixForRoiOrigin;
+  std::string targetFrame_id = currentTileTfName;
   mapRefresh.unlock();
 
   // Perform sanity checks

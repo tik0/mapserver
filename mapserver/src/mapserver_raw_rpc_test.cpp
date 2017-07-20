@@ -43,6 +43,7 @@ void callService() {
   mapserver::rsm::Response res;
 
   //Fill request for map server
+  req.request.header.stamp = ros::Time::now();
   req.request.frame_id = frameId;
   req.request.header.frame_id = frameId;
   req.request.width = int(width_m / resolution_meterPerTile);

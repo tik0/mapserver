@@ -255,21 +255,21 @@ class Mapserver {
   /// |      /dst/ <-- cutted view     |
   /// |                                |
   /// |                                |
+  /// |              O                 |
+  /// |             targetFrame        |
   /// |                                |
   /// |                                |
-  /// |                 O              |
+  /// |                 X              |
   /// |               sourceFrame      |
   /// |                                |
-  /// |                                |
-  /// |                                |
   /// |src                             |
-  /// O---------------------------------
-  /// targetFrame
+  /// ----------------------------------
+  ///
   ///
   /// \param src Source content
   /// \param dst The cutted view
   /// \param res Resolution of the source content in m/pixel
-  /// \param targetFrame The frame where the cutted view is going to be calculated (commonly the frame where src resides)
+  /// \param targetFrame The frame where the cutted view is going to be calculated (Has to be the center of the src (s.t. ROI))
   /// \param sourceFrame The frame where the request was taken
   /// \param xTrans_m X translation of the view's origin in the sourceFrame
   /// \param yTrans_m Y translation of the view's origin in the sourceFrame
