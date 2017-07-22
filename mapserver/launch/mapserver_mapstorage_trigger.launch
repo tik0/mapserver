@@ -1,8 +1,10 @@
 <?xml version="1.0"?>
  <launch>
 
+   <arg name="file" default="$(find mapserver)/yaml/lem_oct_2016.txt.yml" />
+
   <node pkg="mapserver" name="mapserver_mapstorage_trigger" type="mapserver_mapstorage_trigger_node" output="screen">
-    <rosparam command="load" file="$(find mapserver)/yaml/lem_oct_2016.txt.yml" />
+    <rosparam command="load" file="$(arg file)" />
     <param name="store_maps_topic" type="string" value="/storemaps" />
     <param name="topics" type="string" value="" />
     <param name="debug" type="int" value="0" />
