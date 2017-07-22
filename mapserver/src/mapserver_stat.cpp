@@ -37,12 +37,12 @@ std::shared_ptr<cv::Mat> MapserverStat::mrptOgmToGrayScale(
       new cv::Mat(map.getSizeY(), map.getSizeX(), toFloat ? CV_32FC1 : CV_8SC1));
 
   if (toFloat) {
-    for (int idx = 0; idx < map.getRawMap().size(); ++idx) {
+    for (std::size_t idx = 0; idx < map.getRawMap().size(); ++idx) {
       dst->at<float>(idx) = mrpt::maps::COccupancyGridMap2D::l2p(
           map.getRawMap().at(idx));
     }
   } else {
-    for (int idx = 0; idx < map.getRawMap().size(); ++idx) {
+    for (std::size_t idx = 0; idx < map.getRawMap().size(); ++idx) {
       dst->at<char>(idx) = char(100.0f * mrpt::maps::COccupancyGridMap2D::l2p(
           map.getRawMap().at(idx)));
     }
@@ -81,8 +81,8 @@ std::shared_ptr<std::vector<tf::Point>> MapserverStat::ogmCellCoordinatesToPoint
 
       auto pointsIter = points->begin();
       // tf::Stamped<tf::Point> ptInOgmFrame(tf::Point(0,0,0), ogm->header.stamp, ogm->header.frame_id); // The metric point of a OGM cell in the OGM frame
-      for (int idy = idyStart; idy < idyStart + idyHeight; ++idy) {
-        for (int idx = idxStart; idx < idxStart + idxWidth;
+      for (int idy = idyStart; idy < int(idyStart + idyHeight); ++idy) {
+        for (int idx = idxStart; idx < int(idxStart + idxWidth);
             ++idx, ++pointsIter) {
           const tf::Point ptInOgmOrigin(
               float(idx) * ogm->info.resolution + cornerToCenterOffset,
@@ -124,8 +124,8 @@ sensor_msgs::PointCloud::Ptr MapserverStat::ogmCellsToPointCloud(
     auto pointCloudValueIter = ogmAsPointCloud->channels.at(0).values.begin();
     auto pointCloudPointIter = ogmAsPointCloud->points.begin();
     auto pointIter = points->begin();
-    for (int idy = idyStart; idy < idyStart + idyHeight; ++idy) {
-      for (int idx = idxStart; idx < idxStart + idxWidth;
+    for (int idy = idyStart; idy < int(idyStart + idyHeight); ++idy) {
+      for (int idx = idxStart; idx < int(idxStart + idxWidth);
           ++idx, ++pointCloudValueIter, ++pointCloudPointIter, ++pointIter) {
         const int index = idx + (idy * ogm->info.width);
         *pointCloudValueIter = float(ogm->data.at(index)) / 100.0f;
@@ -625,9 +625,9 @@ void MapserverStat::doIsmFusion(const nav_msgs::OccupancyGrid::ConstPtr &msg,
   }
 
   for (int idy = 0;
-      idy < std::min(ogmTransformed->info.height, map->getSizeY()); ++idy) {
+      idy < int(std::min(ogmTransformed->info.height, map->getSizeY())); ++idy) {
     for (int idx = 0;
-        idx < std::min(ogmTransformed->info.width, map->getSizeX()); ++idx) {
+        idx < int(std::min(ogmTransformed->info.width, map->getSizeX())); ++idx) {
       // Get the index to get the correct cell out of the update
 //      const int y = idx-mapOffsetXStart;
 //      const int x = idy-mapOffsetYStart;
@@ -801,8 +801,8 @@ void MapserverStat::formatAndSendGrid(
     msg.cell_height = resolution_mPerTile;
     msg.cell_width = resolution_mPerTile;
     auto pointsIt = points.begin();
-    for (int idy = 0; idy < mapIt->second->getSizeY(); ++idy) {
-      for (int idx = 0; idx < mapIt->second->getSizeX(); ++idx) {
+    for (int idy = 0; idy < int(mapIt->second->getSizeY()); ++idy) {
+      for (int idx = 0; idx < int(mapIt->second->getSizeX()); ++idx) {
         // We get values from 0 .. 100
         if (mapIt->second->getCell(idx, idy)
             > minDrawOccupancyUpdateCertainty) {
@@ -941,50 +941,6 @@ void MapserverStat::addBlindSpotsToOgm(
   }
 }
 
-///
-/// \brief Shows the current RPC if debug is on
-///
-//void showRpc() {
-//    if (debug) {
-//        ROS_INFO("DEBUG: Show the requests");
-//        if(mapStackStatisticDebug.empty() || mapStackStatisticDebug.empty()) {
-//            ROS_ERROR("mapStackStatistic is empty");
-//            return;
-//        }
-//        cv::Mat mapStackStatisticRequestDebugTmp, mapStackStatisticDebugTmp;
-//        mtxShowRpc.lock();
-//            mapStackStatisticRequestDebug.copyTo(mapStackStatisticRequestDebugTmp);
-//            mapStackStatisticDebug.copyTo(mapStackStatisticDebugTmp);
-//            mapStackStatisticDebugTmp.release();
-//            mapStackStatisticRequestDebugTmp.release();
-//            cv::RotatedRect rectTmp = rect;
-//        mtxShowRpc.unlock();
-//
-//        std::stringstream os;
-//        os << ros::Time::now();
-//        {
-//            cv::imshow(std::string("mapStackStatisticRequest"), mapStackStatisticRequestDebugTmp);
-//            cv::setWindowTitle(std::string("mapStackStatisticRequest"),
-//                               std::string("mapStackStatisticRequest at ") + os.str());
-//        }
-//        {
-//            // Draw the request in pseudo-colors
-//            if (debugDrawRpc) {
-//                // TODO Make a cast which is possible to handle all data types
-//                utils::castCopyImage(mapStackStatisticDebugTmp, mapStackStatisticDebugTmp, CV_16UC1);
-//                mapStackStatisticDebugTmp.convertTo(mapStackStatisticDebugTmp, CV_8UC3);
-//                cv::cvtColor( mapStackStatisticDebugTmp, mapStackStatisticDebugTmp, CV_GRAY2BGR );
-//                utils::drawRotatedRectInImage(mapStackStatisticDebugTmp, rect, cv::Scalar(0,0,255));
-//            }
-//
-//            cv::imshow(std::string("mapStackStatistic"), mapStackStatisticDebugTmp);
-//            cv::setWindowTitle(std::string("mapStackStatistic"),
-//                               std::string("mapStackStatistic at ") + os.str());
-//        }
-//        cv::waitKey(1);
-//    }
-//}
-
 void MapserverStat::addMapToResponse(
     const std::string &name, mrpt::maps::COccupancyGridMap2D* map,
     mapserver::ismStackFloat::Response &response) {
@@ -1000,7 +956,7 @@ void MapserverStat::addMapToResponse(
   auto mapName = response.response.mapNames.strings.end() - 1;
   *mapName = name;
 
-  const std::size_t numCells = map->getSizeX() * map->getSizeY();
+  const int numCells = map->getSizeX() * map->getSizeY();
   // Copy the cells
   auto mapRes = (response.response.mapStack.end() - 1);
   mapRes->map.resize(numCells);
@@ -1338,7 +1294,7 @@ void MapserverStat::getBlindSpots(ros::NodeHandle &n, BlindSpots &blindSpots) {
                 << ps2.getOrigin().getY() << "], " << "[frame_id: "
                 << ps1.frame_id_ << "]");
         blindSpots.push_back(pt);
-      } catch (XmlRpc::XmlRpcException a) {
+      } catch (XmlRpc::XmlRpcException &a) {
         std::cerr << "XmlRpc exception: " << a.getMessage() << std::endl;
       }
     } else {
@@ -1349,35 +1305,34 @@ void MapserverStat::getBlindSpots(ros::NodeHandle &n, BlindSpots &blindSpots) {
 }
 
 void MapserverStat::spinOnce() {
-  // Plot map
-  //      boost::shared_ptr<cv::Mat> image(doColorMapCallback());
-  //      cv::imshow( "Current View", *image );                    // Show our image inside it.
-  //      cv::waitKey(1); // Update the window
+  // Plot a distinctive map defined in debugTopic
   if (debug) {
     try {
-      //            std::shared_ptr<cv::Mat> image(mrptOgmToGrayScale(*currentMapStack->at(debugTopic)));
-      //            std::shared_ptr<cv::Mat> image(Mapserver::rosOccToGrayScale(this->msgDebug));
-      //              if (image) {
-      //                  cv::flip(*image, *image, 0);
-      //                  cv::imshow( "Current View", *image);
-      //                  cv::waitKey(1); // Update the window
-      //              }
+      std::shared_ptr<cv::Mat> image(mrptOgmToGrayScale(*currentMapStack->at(debugTopic)));
+      if (image) {
+          cv::flip(*image, *image, 0);
+          cv::imshow( "Current View", *image);
+          cv::waitKey(1); // Update the window
+      }
     } catch (...) {
       ROS_WARN("Debug visualization: No such topic '%s' in currentMapStack",
                debugTopic.c_str());
     }
-    // Publish the maps
-    std::vector<std::string> foo;
+  }
+  // Publish the maps
+  if (debug) {
+    std::vector<std::string> topicListToSend; // Leaving empty for sending everything
     tf::Vector3 trans = tf::Vector3(tfScalar(-(maxX_m - minX_m) / 2.0f),
                                     tfScalar(-(maxY_m - minY_m) / 2.0f),
                                     tfScalar(0.0f));
     std::shared_ptr<tf::Pose> poseOffset = std::shared_ptr<tf::Pose>(
         new tf::Pose(tf::Quaternion(0, 0, 0, 1), trans));
     std::string reference = currentTileTfName + tileOriginTfSufixForRoiOrigin;
-    formatAndSendGrid(foo, reference, currentMapStack, n, topicDebugGridPrefix);
+    formatAndSendGrid(topicListToSend, reference, currentMapStack, n, topicDebugGridPrefix);
   }
 
-  //      showRpc();
+  // Show the last RPC
+  showRpc();
 
   // Add new subscribers
   this->advertiseSubscribers(subIsmList, &MapserverStat::doIsmFusion, this,
@@ -1477,3 +1432,35 @@ void MapserverStat::mapStorage(
       false,                                 // Don't store the current position
       additionalInformationString, timestamp);
 }
+
+
+void MapserverStat::applyAction(const diagnostic_msgs::KeyValue::ConstPtr msg) {
+
+  mapRefresh.lock();
+  std::string tileTfName = this->currentTileTfName;
+  auto mapStack = this->currentMapStack;
+  mapRefresh.unlock();
+
+  if (msg->key.compare("forget") == 0) {
+    // Get the factor
+    double factor = std::stod(msg->value);
+    // Apply the factor on every map
+    for (auto it = mapStack->begin(); it != mapStack->end(); ++it) {
+      std::vector<mrpt::maps::COccupancyGridMap2D::cellType>& map =
+          const_cast<std::vector<mrpt::maps::COccupancyGridMap2D::cellType>&>(it->second->getRawMap());
+      for (auto itCell = map.begin(); itCell != map.end(); ++itCell) {
+        *itCell = mrpt::maps::COccupancyGridMap2D::cellType(*itCell * factor);
+      }
+
+
+    }
+  }
+}
+
+
+
+
+
+
+
+

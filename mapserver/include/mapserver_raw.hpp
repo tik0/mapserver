@@ -320,7 +320,7 @@ class MapserverRaw : public Mapserver<short, nav_msgs::OccupancyGrid, short,
       ogm.info.resolution = resolution_mPerTile;
       ogm.data.resize(mapSizeY * mapSizeX, 0);
       // HACK Needs parametrization for display: look at 1e-1
-      for (int idx = 0; idx < ogm.data.size(); ++idx) {
+      for (std::size_t idx = 0; idx < ogm.data.size(); ++idx) {
         ogm.data.at(idx) = int8_t(
             float(mapHeight_mm->at(0).at<int16_t>(idx)) * 0.1f);
         //       std::cerr << ogm.data.at(idx) << " ";
@@ -387,7 +387,7 @@ class MapserverRaw : public Mapserver<short, nav_msgs::OccupancyGrid, short,
           CV_8UC3);
           cv::cvtColor(mapStackStatisticDebugTmp, mapStackStatisticDebugTmp,
                        CV_GRAY2BGR);
-          utils::drawRotatedRectInImage(mapStackStatisticDebugTmp, rect,
+          utils::drawRotatedRectInImage(mapStackStatisticDebugTmp, rectTmp,
                                         cv::Scalar(0, 0, 255));
         }
 
@@ -463,7 +463,7 @@ MapserverRaw::MapserverRaw(ros::NodeHandle &nh)
         new std::vector<cv::Mat>(1));
 
     // Copy the initiated date to the map stacks
-    for (std::size_t idx = 0; idx < maxLayer; ++idx) {
+    for (int idx = 0; idx < maxLayer; ++idx) {
       mapInit.copyTo(currentMapHeight_mm->at(idx));
       mapInit.copyTo(lastMapHeight_mm->at(idx));
       mapInit.copyTo(currentPulsewidth_ps->at(idx));

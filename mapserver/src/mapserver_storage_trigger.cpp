@@ -35,13 +35,13 @@ int main(int argc, char **argv) {
     timestamps.resize(timestampList.size());
 
     ROS_INFO("Copy the parameters");
-    for (std::size_t idx = 0; idx < timestampList.size(); ++idx) {
+    for (int idx = 0; idx < timestampList.size(); ++idx) {
       ROS_ASSERT(
           timestampList[idx].getType() == XmlRpc::XmlRpcValue::TypeDouble);
       timestamps.at(idx) = ros::Time(static_cast<double>(timestampList[idx]));
     }
     ROS_INFO_STREAM("Copied " << timestampList.size() << " entries");
-  } catch (XmlRpc::XmlRpcException a) {
+  } catch (XmlRpc::XmlRpcException &a) {
     std::cerr << "XmlRpc exception: " << a.getMessage() << std::endl;
     timestamps.resize(0);
   }

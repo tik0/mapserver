@@ -267,6 +267,12 @@ class MapserverStat : public Mapserver<mrpt::maps::COccupancyGridMap2D,
   virtual void spinOnce();
 
   ///
+  /// \brief Applies a given action to the mapserver
+  /// \param msg The key/value pair, where the key defines the action and the value the magnitude
+  ///
+  virtual void applyAction(const diagnostic_msgs::KeyValue::ConstPtr msg);
+
+  ///
   /// \brief Translates the content of a map and fills up the boarders
   /// \param map The map
   /// \param offsetx Offset to move in X pixel direction
@@ -359,5 +365,14 @@ class MapserverStat : public Mapserver<mrpt::maps::COccupancyGridMap2D,
       const std::string prefixString, const std::string formatString,
       const std::string formatUnitString, const double resolution_meterPerTile,
       const ros::Time timestamp = ros::Time::now());
+
+  ///
+  /// \brief Shows the current RPC if debug is on
+  ///
+  void showRpc() {
+    if (debug) {
+      // TODO have a look on mapserver_raw
+    }
+  }
 
 };

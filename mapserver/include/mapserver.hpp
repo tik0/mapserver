@@ -25,6 +25,7 @@
 #include <std_msgs/String.h>
 #include <xmlrpcpp/XmlRpc.h>
 #include <mapserver_msgs/StringStamped.h>
+#include <diagnostic_msgs/KeyValue.h>
 
 #include <nav_msgs/OccupancyGrid.h>
 #include <geometry_msgs/PoseArray.h>
@@ -93,6 +94,8 @@ class Mapserver {
   int dontStoreMaps = 0;
   //! Indicator, if maps should be shifted in the memory if currentTileTfName changes
   int shiftMap = 1;
+  //! The Topic over which actions for the mapserver can be send
+  std::string topicAction;
   //! The topic prefix used by advertiseSubscribers to subscribe to all child topics
   std::string topicPrefix;
   //! The prefix of the frame id for the origin of the tile
@@ -166,9 +169,12 @@ class Mapserver {
   //! Subscriber for tile name messages
   ros::Subscriber subscriberTfTileName;
   //! Subscriber to store the maps on demand
+  // TODO Merge functionality with subscriberAction
   ros::Subscriber subscriberStoreMaps;
   //! Subscriber for pns tuple messages
   ros::Subscriber subscriberTuple;
+  //! Subscriber for actions
+  ros::Subscriber subscriberAction;
   //! List of subscribers which is filled up by function advertiseSubscribers
   std::vector<ros::Subscriber> subIsmList;
 
@@ -367,6 +373,24 @@ class Mapserver {
   /// \return Pointer to the begin of the map
   ///
   virtual void* getRawData(TMapstack *map) {
+    return NULL;
+  }
+  ;
+
+  ///
+  /// \brief Applies a given action to the mapserver
+  /// \param msg The key/value pair, where the key defines the action and the value the magnitude
+  ///
+  virtual void applyAction(const diagnostic_msgs::KeyValue::ConstPtr msg) {
+  }
+  ;
+
+  ///
+  /// \brief Applies a given action to the mapserver callback
+  /// \param msg The key/value pair, where the key defines the action and the value the magnitude
+  ///
+  void applyActionCb(const diagnostic_msgs::KeyValue::ConstPtr msg) {
+    applyAction(msg);
   }
   ;
 
@@ -593,11 +617,11 @@ void Mapserver<TMapstack, TData, TValue, TChild>::advertiseSubscribers(
   if (ros::master::getTopics(topics)) {
     if (debug) {  // Print topics
       ROS_DEBUG("List topics:\n");
-      for (int idx = 0; idx < topics.size(); ++idx) {
+      for (std::size_t idx = 0; idx < topics.size(); ++idx) {
         ROS_DEBUG("\n%d:\n"
                   "  TOPIC: %s\n"
                   "  TYPE : %s\n",
-                  idx, topics.at(idx).name.c_str(),
+                  int(idx), topics.at(idx).name.c_str(),
                   topics.at(idx).datatype.c_str());
       }
     }
@@ -607,7 +631,7 @@ void Mapserver<TMapstack, TData, TValue, TChild>::advertiseSubscribers(
       ROS_WARN("Using all scopes, because ism_scope_prefix is empty");
       topicsForSubscription = std::vector<bool>(topics.size(), true);
     } else {  // Set the indicator to true, if the super-topic is the same
-      for (int idx = 0; idx < topics.size(); ++idx) {
+      for (std::size_t idx = 0; idx < topics.size(); ++idx) {
         if (!topics.at(idx).name.substr(0, superTopic.size()).compare(
             superTopic)) {
           topicsForSubscription.at(idx) = true;
@@ -615,7 +639,7 @@ void Mapserver<TMapstack, TData, TValue, TChild>::advertiseSubscribers(
       }
     }
     // Check if the topics are already subscribed, otherwise add a subscription
-    for (int idx = 0; idx < topics.size(); ++idx) {
+    for (std::size_t idx = 0; idx < topics.size(); ++idx) {
       if (!topicsForSubscription.at(idx)) {  // Skip if the topic is not valid
         continue;
       } else {
@@ -630,7 +654,7 @@ void Mapserver<TMapstack, TData, TValue, TChild>::advertiseSubscribers(
                             topics.at(idx).name)));
         } else {
           subscribe = true;
-          for (int idy = 0; idy < subList.size(); ++idy) {  // Check if topic already subscribed, ...
+          for (std::size_t idy = 0; idy < subList.size(); ++idy) {  // Check if topic already subscribed, ...
             if (!subList.at(idy).getTopic().compare(topics.at(idx).name)) {
               subscribe = false;
               break;
@@ -846,6 +870,7 @@ Mapserver<TMapstack, TData, TValue, TChild>::Mapserver(ros::NodeHandle *nh)
       mapStorageLocation(constants::mapping::ogm::mapStorageLocation),
       dontStoreMaps(0),
       shiftMap(1),
+      topicAction("/action"),
       topicPrefix("/ism"),
       tileOriginTfPrefix("map_base_link_"),
       tileOriginTfSufixForRoiOrigin(
@@ -877,6 +902,7 @@ Mapserver<TMapstack, TData, TValue, TChild>::Mapserver(ros::NodeHandle *nh)
       storageNameFormat(""),
       storageNameUnit("") {
 
+  n->getParam("topic_action", this->topicAction);
   n->getParam("ism_scope_prefix", this->topicPrefix);
   n->getParam("tile_origin_tf_prefix", this->tileOriginTfPrefix);
   n->getParam("tile_origin_tf_sufix_for_roi_origin",
@@ -928,6 +954,9 @@ Mapserver<TMapstack, TData, TValue, TChild>::Mapserver(ros::NodeHandle *nh)
                                          &Mapserver::tupleHandlerCb, this);
   }
 
+  // Subscriber for the sctions
+  this->subscriberAction = n->subscribe(this->topicAction, 1,
+                                        &Mapserver::applyActionCb, this);
   // Command scope to store the maps on demand
   this->subscriberStoreMaps = n->subscribe(this->storeMapsTopic, 1,
                                            &Mapserver::storeMaps, this);
