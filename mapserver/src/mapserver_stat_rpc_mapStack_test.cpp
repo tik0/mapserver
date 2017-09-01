@@ -42,6 +42,10 @@ void callService() {
   if (client.call(req, res)) {
     ROS_INFO("SUCCESS\n");
     int idx = 0;
+
+    std::vector<cv::Mat> allMaps;
+    allMaps.reserve(res.response.mapNames.strings.size());
+
     auto itMap = res.response.mapStack.begin();
     for (auto it = res.response.mapNames.strings.begin();
         it != res.response.mapNames.strings.end(); ++it, ++idx, ++itMap) {
@@ -49,9 +53,23 @@ void callService() {
 
       cv::Mat mat = cv::Mat(itMap->info.height, itMap->info.width, CV_32FC1,
                             (void*) itMap->map.data());
+      cv::flip(mat, mat, 0);
       cv::imshow(*it, mat);
       cv::waitKey(1);
+
+      allMaps.push_back(mat);
     }
+
+    // make sure to have three channels for combined display
+    if (allMaps.size() > 0) {
+        allMaps.resize(3, cv::Mat1f(allMaps.at(0).size(), 0.0f));
+
+        cv::Mat3f combined;
+        cv::merge(allMaps, combined);
+        cv::imshow("combined", combined);
+        cv::waitKey(1);
+    }
+
   } else {
     ROS_ERROR("Failed to call mapserver service");
   }
