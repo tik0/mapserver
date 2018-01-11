@@ -1,0 +1,94 @@
+<launch>
+
+  <!-- These are the arguments you can pass this launch file, for example paused:=true -->
+  <arg name="paused" default="false"/>
+  <arg name="use_sim_time" default="true"/>
+  <arg name="gui" default="true"/>
+  <arg name="headless" default="false"/>
+  <arg name="debug" default="false"/>
+  <arg name="update_rate" default="50.0"/> <!--Update rate for tfs and gazebo plugins-->
+  <arg name="world_name" default="$(find amiro_gazebo)/worlds/desk.world"/> <!--Gazebo world to load-->
+
+  <include file="$(find mapserver)/launch/mapserver_amiro-ecmr-2017-final-submission.launch" />
+
+  <!-- The robots -->
+  <!-- We resume the logic in empty_world.launch, changing only the name of the world to be launched -->
+  <include file="$(find amiro_gazebo)/launch/gazebo.launch">
+<!--     <arg name="world_name" value="$(find amiro_gazebo)/worlds/empty_slow.world"/> -->
+    <arg name="world_name" value="$(arg world_name)"/>
+<!--     <arg name="world_name" value="$(find amiro_gazebo)/worlds/amiro.world"/> -->
+    <arg name="debug" value="$(arg debug)" />
+    <arg name="gui" value="$(arg gui)" />
+    <arg name="paused" value="$(arg paused)"/>
+    <arg name="use_sim_time" value="$(arg use_sim_time)"/>
+    <arg name="headless" value="$(arg headless)"/>
+  </include>
+
+  <!-- Load the AMiRo+camera with namespace amiro6 -->
+  <include file="$(find amiro_description)/launch/amiro.launch" clear_params="true" ns="amiro6">
+    <arg name="robot_name" value="amiro6" />
+    <arg name="robot_position" value="-x 0.102226 -y -0.351070 -z 0.887186 -R 0 -P 0 -Y 0" />
+    <arg name="update_rate" value="$(arg update_rate)" />
+    <arg name="robot_model" value="amiro_camera_hokuyo.xacro" />
+    <arg name="lid_sensor_pitch" value="0.785" />
+    <arg name="use_gpu_laser" value="true" />
+  </include>
+
+  <!-- Start rviz-->
+  <!--<node name="rviz" pkg="rviz" type="rviz" args="-d $(find mapserver)/launch/viz.rviz"/>-->
+  
+  <!-- ISM model for camera -->
+  <include file="$(find image_inverse_sensor_model)/launch/image_to_ogm.launch">
+<!--     <arg name="topicIns" value="/amiro6/front_camera/image_raw"/> -->
+    <arg name="topicIns" value="/amiro6/front_camera/classified/image_raw"/>
+    <arg name="topicOut" value="/amiro6/ism/cam"/>
+    <arg name="parent_frame" value="amiro6/base_link"/>
+    <arg name="grid_resolution" value="0.04"/>
+    <arg name="imageWidth" value="800"/>
+    <arg name="imageHeight" value="800"/>
+    <arg name="object_extend" default="0.1"/>
+    <arg name="cam_xTranslation" value="0.0495"/>
+    <arg name="cam_yTranslation" value="0"/>
+    <arg name="cam_zTranslation" value="0.033"/>
+    <arg name="cam_pitch" value="0.0"/>
+    <arg name="cam_yaw" value="0.0"/>
+    <arg name="cam_FOV" value="0.987307318463"/> <!-- Half total viewing angle from corner to corner (rad) 1.3962634 * sqrt(2) / 2-->
+  </include>
+  
+  <node name="hsvAnomalyClassification" pkg="hsv_anomaly_classification" type="hsvAnomalyClassification">
+    <param name="input_topic" value="/amiro6/front_camera/image_raw"/>
+    <param name="output_topic" value="/amiro6/front_camera/classified/image_raw"/>
+    <param name="upperBoundary" value="0.0"/>
+    <param name="lowerBoundary" value="0.2"/>
+    <param name="debug" value="0"/>
+  </node>
+
+    
+  <node name="ism_plane_detection" pkg="ism_plane_detection" type="ism_plane_detection">
+    <param name="laser_input_topic" value="/amiro6/laser/scan"/>
+    <param name="ogm_output_topic" value="/amiro6/ism/laser"/>
+    <param name="resolution" value="0.02"/>
+    <param name="upper_boundary" value="0.8"/>
+    <param name="lower_boundary" value="0.2"/>
+    <param name="fuzzy_intersection_m" value="0.02"/>
+    <param name="width" value="1.0"/>
+    <param name="depth" value="1.0"/>
+    <param name="base_frame_id" value="amiro6/base_link"/>
+    <param name="debug" value="0"/>
+  </node>
+  
+  <node name="ism_edge_detection" pkg="ism_plane_detection" type="ism_edge_detection">
+    <param name="laser_input_topic" value="/amiro6/laser/scan"/>
+    <param name="ogm_output_topic" value="/amiro6/ism/edge"/>
+    <param name="resolution" value="0.02"/>
+    <param name="upper_boundary_p" value="0.8"/>
+    <param name="lower_boundary_p" value="0.2"/>
+    <param name="upper_boundary_m" value="0.05"/>
+    <param name="lower_boundary_m" value="0.01"/>
+    <param name="width" value="1.0"/>
+    <param name="depth" value="1.0"/>
+    <param name="base_frame_id" value="amiro6/base_link"/>
+    <param name="debug" value="0"/>
+  </node>
+  
+</launch>
